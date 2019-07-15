@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 
 FILE=./ubuntu_dialogs.tgz
 if [ ! -f "$FILE" ]; then
