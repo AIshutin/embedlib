@@ -1,3 +1,7 @@
+corp.txt
+dialogs/
+pretrained-bert-base-uncased/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
