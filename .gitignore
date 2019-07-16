@@ -1,6 +1,7 @@
 corp.txt
 dialogs/
 pretrained-bert-base-uncased/
+*.tgz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
