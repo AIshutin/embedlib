@@ -23,7 +23,7 @@ from itertools import groupby
 class twitt_dataset(Dataset):
     def __init__(self, tokenizer, pth = 'corp (1).txt'):
         '''
-            Gets Path to TXT file in format 
+            Gets Path to TXT file in format
             [CLS] Qestion [SEP] \n
             [CLS] Answer [SEP]\n
             \n
