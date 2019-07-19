@@ -1,3 +1,6 @@
+from torch.utils.data import Dataset
+import os
+
 class UbuntuCorpus(Dataset):
 	def __init__(self, tokenzier, dir='./dialogs'):
 		super().__init__()
@@ -64,23 +67,25 @@ class UbuntuCorpus(Dataset):
 
 
 class TwittCorpus(Dataset):
-    def __init__(self, tokenizer, pth = 'corp (1).txt'):
-        '''
-            Gets Path to TXT file in format
-            [CLS] Qestion [SEP] \n
-            [CLS] Answer [SEP]\n
-            \n
-            ...
-        '''
-        super(twitt_dataset, self).__init__()
-        with open(pth, 'r') as f:
-            reps = f.readlines()
-        dgs = [list(group) for k, group in groupby(reps, lambda x: x == '\n') if not k]
-        for i in range(len(dgs)):
-            dgs[i][0] = dgs[i][0].remove('[SEP]', '').rstrip()
-            dgs[i][1] = dgs[i][1].remove('[SEP]', '').rstrip()
-        self.qa_s = dgs
-    def __len__(self):
-        return len(self.qa_s)
-    def __getitem__(self,idx):
-        return (self.qa_s[idx][0], self.qa_s[idx][1])
+	def __init__(self, tokenizer, path='corp (1).txt'):
+		'''
+		Gets Path to TXT file in format
+		[CLS] Qestion [SEP] \n
+		[CLS] Answer [SEP]\n
+		\n
+		...
+		'''
+		super(twitt_dataset, self).__init__()
+		with open(path, 'r') as f:
+			reps = f.readlines()
+		dgs = [list(group) for k, group in groupby(reps, lambda x: x == '\n') if not k]
+		for i in range(len(dgs)):
+			dgs[i][0] = dgs[i][0].remove('[SEP]', '').rstrip()
+			dgs[i][1] = dgs[i][1].remove('[SEP]', '').rstrip()
+		self.qa_s = dgs
+
+	def __len__(self):
+		return len(self.qa_s)
+
+	def __getitem__(self, idx):
+		return (self.qa_s[idx][0], self.qa_s[idx][1])

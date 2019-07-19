@@ -12,24 +12,32 @@ import tqdm
 
 import metrics
 import losses
+from utils import get_optimizer_params, embed_batch, prepare_batch
 
 from sacred import Experiment
+import logging
+
 ex = Experiment()
 
 @ex.config
 def config():
 	test_split = 0.2
 	checkpoint_dir = "checkpoints"
-	learning_rate = 5e-5
+	learning_rate = 5e-5 # 5e-5, 3e-5, 2e-5 are recommended in the paper
+	epochs = 3
+	warmup = 0.1
+
 	metric_func = 'calc_mrr'
 	criterion_func = 'hinge_loss'
+	batch_size = 10 # 16, 32 are recommended in the paper
+
 	# BERT config
 	max_seq_len = 512
 	bert_type = 'bert-base-uncased'
 	cache_dir = './pretrained-' + bert_type
 
 @ex.capture
-def get_data(_log, test_split, data_path):
+def get_data(_log, data_path, test_split):
 	corpus = UbuntuCorpus(tokenizer)
 	_log.info('Corpus length: ' + len(corpus))
 
@@ -46,52 +54,32 @@ def get_criterion(criterion_func):
 	return criterion
 
 @ex.capture
-def get_model():
+def get_model(bert_type, cache_dir):
 	tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
+	qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+	aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+	model = (qembedder, aembedder)
 
 	return tokenizer, model
 
+@ex.capture
+def save_model(model, checkpoint_dir):
+	pass
+
 @ex.automain
-def train(_log, dataset):
+def train(_log):
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-	tokenizer, model = get_model()
-	train, test = get_data()
+	tokenizer, (qembedder, aembedder) = get_model()
+	qembedder.to(device)
+	aembedder.to(device)
+
+	train, test = get_data(_log, '.')
 
 	metric = get_metric()
 	criterion = get_criterion()
 
-
-def get_optimizer_params(model):
-  param_optimizer = list(model.named_parameters())
-  no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-
-  optimizer_grouped_parameters = [
-     {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-			{'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-  ]
-
-  return optimizer_grouped_parameters
-
-test_size = int(len(corpus) * .33)
-train_size = len(corpus) - test_size
-train_corpus, test_corpus = torch.utils.data.random_split(corpus, [train_size, test_size])
-
-def print_batch(batch):
-	for i in range(len(batch[0])):
-		print(i, batch[0][i])
-		print('>>> ', batch[1][i])
-	print()
-
-
-def train(epochs):
-	batch_size = 10 # 16, 32 are recommended in the paper
-	trainloader = DataLoader(corpus, batch_size=batch_size, shuffle=True) #
-	testloader = trainloader # DataLoader(test_corpus, batch_size=batch_size, shuffle=True)
-	num_train_optimization_steps = len(corpus) * epochs
-
-	lr = 5e-5 # 5e-5, 3e-5, 2e-5 are recommended in the paper
-	warmup = 0.1
+	num_train_optimization_steps = len(train) * epochs
 
 	qoptim = BertAdam(get_optimizer_params(qembedder),
 						lr=lr,
@@ -102,58 +90,41 @@ def train(epochs):
 						lr=lr,
 						warmup=warmup,
 						t_toal=num_train_optimization_steps)
-	criterion = hinge_loss
 
-	total = right = 0
-	with torch.no_grad():
-		for batch in testloader:
-			total += len(batch[0])
-			print_batch(batch)
-			embeddings = embed_batch(prepare_batch(batch), qembedder, aembedder)
-			right += calc_acc(*embeddings)
+	score_before_finetuning = metrics.get_mean_score_on_data(metrics, test, (qembedder, aembedder))
 
-	qembedder.train()
-	aembedder.train()
+	_log.info("***** Running training *****")
+	_log.info("  Num steps = %d", num_train_optimization_steps)
+	_log.info(f"Score before fine-tuning: {score_before_finetuning:9.4f}")
 
-	logger.info("***** Running training *****")
-	logger.info("  Num steps = %d", num_train_optimization_steps)
-	logger.info(f"Before training: right: {right} of {total}")
-
-	start_training = time.time()
 	for epoch in range(epochs):
 		total_loss = 0
 		qembedder.train()
 		aembedder.train()
-		for bidx, batch in enumerate(tqdm.tqdm(iter(trainloader), desc=f"epoch {epoch}")):
+
+		for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
 			qoptim.zero_grad()
 			aoptim.zero_grad()
-			#print('batch_index', bidx)
 
-			embeddings = embed_batch(prepare_batch(batch), qembedder, aembedder)
+			embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder)
 			loss = criterion(*embeddings)
+
 			total_loss += loss.item()
 			loss.backward()
 
 			qoptim.step()
 			aoptim.step()
 
-		total = right = 0
-		qembedder.eval()
-		aembedder.eval()
-		with torch.no_grad():
-			for batch in testloader:
-				total += len(batch[0])
-				print_batch(batch)
+		# ToDo do something with score
+		score = metrics.get_mean_score_on_data(metrics, test, (qembedder, aembedder))
+		_log.info(f'score {score:9.4f} | loss:bert {total_loss:9.4f} ')
 
-				embeddings = embed_batch(prepare_batch(batch), qembedder, aembedder)
-				right += calc_acc(*embeddings)
+	logger.info('Fine-tuning is compleated')
+	if torch.cuda.is_available():
+		torch.cuda.empty_cache()
 
-		print(f'right: {right} of {total} | loss: {total_loss} ')
+	# ToDo save model
+	save_model((qembedder, aembedder))
 
-	end_training = time.time()
-	logger.info(f'Training is compleated. Time: {int(end_training - start_training)}')
-	torch.cuda.empty_cache()
-
-qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir).to(device)
-aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir).to(device)
-train(3) # 2, 3, 4 epochs are recommended in the paper
+logger = logging.getLogger(__name__)
+ex.run(logger)

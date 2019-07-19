@@ -10,29 +10,21 @@ def cosine_similarity_table(X, Y):
 
 
 def bce_loss(X, Y, conf_true=0.9, conf_false=0.1):
-	'''на вход пришел батч размера n,
-	мы векторизовали контексты (X)
-	и ответы (Y) и хотим сделать n*n
-	независимых классификаций
-	'''
 	n = X.shape[0]
 
-	logits = torch.mm(X, Y.transpose(0, 1)) # считаем таблицу умножения
+	logits = torch.mm(X, Y.transpose(0, 1))
 	identity = torch.eye(n, device=X.device)
 
 	non_diagonal = torch.ones_like(logits) - identity
 	targets = identity * conf_true + non_diagonal * conf_false
-	#получаем матрицу с conf_true на диагонали и conf_false где-либо ещё
 
 	weights = identity + non_diagonal / (n - 1)
-	# ^ чтобы не было перекоса в сторону негативов
 	return F.binary_cross_entropy_with_logits(logits, targets, weights) * n
 
 
 def hinge_loss(X, Y, margin=0.1):
 	batch_size = X.shape[0]
 	similarities = cosine_similarity_table(X, Y)
-	#^ см. ниже
 
 	identity = torch.eye(batch_size, device=X.device)
 	non_diagonal = torch.ones_like(similarities) - identity
@@ -40,7 +32,6 @@ def hinge_loss(X, Y, margin=0.1):
 	targets = identity - non_diagonal
 	weights = identity + non_diagonal / (batch_size - 1)
 
-	#всё то же самое, но лосс другой: учитываем только то, что не превосходит margin
 	losses = torch.pow(F.relu(margin - targets * similarities), 2)
 	return torch.mean(losses * weights)
 
