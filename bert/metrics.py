@@ -1,5 +1,6 @@
 import numpy as np
 from losses import cosine_similarity_table
+from utils import prepare_batch, embed_batch
 import torch
 
 def calc_accuracy(X, Y):
@@ -25,17 +26,20 @@ def calc_mrr(X, Y):
 	mrr /= n
 	return mrr
 
-def get_mean_score_on_data(metric, data, model):
+def get_mean_score_on_data(metric, data, model, tokenizer):
 	qembedder, aembedder = model
 	device = next(qembedder.parameters()).device
 
 	qembedder.eval()
 	aembedder.eval()
 	score = 0
-	testbatch_cnt = (len(data) - 1) / batch_size + 1
+	batch_size = None
 	with torch.no_grad():
 		for batch in data:
-			embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder)
+			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder)
+			if batch_size is None:
+				batch_size = embeddings[0].shape[0]
 			score += metric(*embeddings)
+	testbatch_cnt = (len(data) - 1) / batch_size + 1
 	score /= testbatch_cnt
 	return score

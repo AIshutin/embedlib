@@ -1,11 +1,12 @@
 from torch.utils.data import Dataset
 import os
+import csv
+from utils import remove_urls
 
 class UbuntuCorpus(Dataset):
-	def __init__(self, tokenzier, dir='./dialogs'):
+	def __init__(self, tokenizer, dir='./dialogs', max_seq_len=512, _cnt=30):
 		super().__init__()
 		dialogs = []
-		_cnt = 30 # debug constant
 		thr = 30
 
 		qa_pairs = []
@@ -52,6 +53,7 @@ class UbuntuCorpus(Dataset):
 					break
 			if _cnt <=0:
 				break
+
 		'''for el in qa_pairs:
 		  print('>>', el[0])
 		  print('>>>', el[1])

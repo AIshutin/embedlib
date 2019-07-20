@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 def cosine_similarity_table(X, Y):
 	X = F.normalize(X)
 	Y = F.normalize(Y)

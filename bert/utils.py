@@ -1,19 +1,34 @@
+import re
+import torch
+
 def remove_urls (vTEXT):
 	# r'http\S+'
 	# r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b'
 	vTEXT = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[link]', vTEXT, flags=re.MULTILINE)
 	return vTEXT
 
-def prepare_batch(batch, device):
+def prepare_batch(batch, device, tokenizer):
 	(quests, answs) = batch
+	#print(quests)
 	quests = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in quests]
 	answs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in answs]
+	#print(quests)
+	#print(quests)
+	#print(quests[0].shape)
+
+	#quest_segments = [torch.zeros(len(quests[i]), 1, device=device) for i in range(len(quests))]
+	#answ_segments = [torch.zeros(len(answs[i]), 1, device=device) for i in range(len(answs))]
+
+	quest_segments = [torch.tensor([[0 for i in range(len(quests[j]))]], device=device) \
+															for j in range(len(quests))]
+	answ_segments = [torch.tensor([[0 for i in range(len(answs[j] ))]], device=device) \
+															for j in range(len(answs))]
 
 	quests = [torch.tensor([el], device=device) for el in quests]
 	answs = [torch.tensor([el], device=device) for el in answs]
 
-	quest_segments = [torch.zeros_like(quests[i]) for j in range(len(quests))]
-	answ_segments = [torch.zeros_like(answs[i]) for j in range(len(answs))]
+	#print(quests)
+	#print(quest_segments)
 
 	return ((quests, quest_segments), (answs, answ_segments))
 
@@ -26,7 +41,7 @@ def get_embedding(embeddings):
 	embeddings = embeddings[-2]
 	result = torch.sum(embeddings, dim=1)
 
-	return result.to(device)
+	return result
 
 def embed_batch(batch, qembedder, aembedder):
 	((quests, quest_segments), (answs, answ_segments)) = batch
