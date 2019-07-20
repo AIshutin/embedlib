@@ -9,7 +9,7 @@ def split_to_pairs(s):
     return new_s
 
 
-def get_reddit_lines(path = 'output/output 1'):
+def get_reddit_lines(path = 'output/output *'):
     with open(path, 'r') as f:
         s = f.readlines()
     return s
@@ -44,8 +44,7 @@ def to_file(new_s):
         for (q,a) in new_s:
             f.write(q+'\n'+a+'\n\n')
 
-
-lines = get_reddit_lines('output/output 1')
+lines = get_reddit_lines('output/reddit_comments.txt')
 #print(lines[:10])
 dgs = final_arr(prep_form(split_to_dialogs(lines)))
 to_file(dgs)
