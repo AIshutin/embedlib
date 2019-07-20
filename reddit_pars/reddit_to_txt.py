@@ -1,5 +1,11 @@
 
 from itertools import groupby
+import bz2
+import argparse
+import os
+import json
+import re
+import sys
 
 
 def split_to_pairs(s):
@@ -9,8 +15,8 @@ def split_to_pairs(s):
     return new_s
 
 
-def get_reddit_lines(path = 'output/output *'):
-    with open(path, 'r') as f:
+def get_reddit_lines(path = 'output/output 1.bz2'):
+    with bz2.open(path, "rt")as f:
         s = f.readlines()
     return s
 
@@ -44,7 +50,8 @@ def to_file(new_s):
         for (q,a) in new_s:
             f.write(q+'\n'+a+'\n\n')
 
-lines = get_reddit_lines('output/reddit_comments.txt')
+
+lines = get_reddit_lines('output/output 1.bz2')
 #print(lines[:10])
 dgs = final_arr(prep_form(split_to_dialogs(lines)))
 to_file(dgs)

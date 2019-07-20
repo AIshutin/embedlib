@@ -9,33 +9,6 @@ FILE_SUFFIX = ".bz2"
 OUTPUT_FILE = "output.bz2"
 REPORT_FILE = "RC_report.txt"
 
-def main():
-	assert sys.version_info >= (3, 3), \
-    "Must be run in Python 3.3 or later. You are running {}".format(sys.version)
-    
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--input_file', type=str, default='reddit_data',
-					   help='data file or directory containing bz2 archive of json reddit data')
-	parser.add_argument('--logdir', type=str, default='output/',
-					   help='directory to save the output and report')
-	parser.add_argument('--config_file', type=str, default='parser_config_standard.json',
-					   help='json parameters for parsing')
-	parser.add_argument('--comment_cache_size', type=int, default=1e7,
-					   help='max number of comments to cache in memory before flushing')
-	parser.add_argument('--output_file_size', type=int, default=2e8,
-					   help='max size of each output file (give or take one conversation)')
-	parser.add_argument('--print_every', type=int, default=1000,
-					   help='print an update to the screen this often')
-	parser.add_argument('--min_conversation_length', type=int, default=5,
-					   help='conversations must have at least this many comments for inclusion')
-	parser.add_argument('--print_subreddit', type=str2bool, nargs='?',
-                       const=False, default=False,
-					   help='set to true to print the name of the subreddit before each conversation'
-					   + ' to facilitate more convenient blacklisting in the config json file.'
-					   + ' (Remember to disable before constructing training data.)')
-	args = parser.parse_args()
-	parse_main(args)
-
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'): return False
@@ -59,7 +32,7 @@ class RedditComment(object):
 
 def parse_main(args):
 	if not os.path.isfile(args.config_file):
-		print("File not found: {}".format(args.input_file))
+		print("File not found: {}".format(args.config_file))
 		return
 	with open(args.config_file, 'r') as f:
 		config = json.load(f)
@@ -250,5 +223,20 @@ def write_report(report_file_path, subreddit_dict):
 		for item in subreddit_list:
 			f.write("{}: {}\n".format(*item))
 
-if __name__ == '__main__':
-	main()
+import argparse
+args = argparse.Namespace()
+args.input_file = 'reddit_data/'
+
+
+if not os.path.exists(args.input_file):
+	print(os.path.exists(args.input_file))
+	print("File not found: {}".format(args.input_file))
+args.logdir = 'output/'
+args.config_file = 'parser_config_standard.json'
+print(os.path.isfile(args.config_file))
+args.comment_cache_size = 1e7
+args.output_file_size = 2e8
+args.print_every = 1000
+args.min_conversation_length = 5
+args.print_subreddit = False
+parse_main(args)
