@@ -1,5 +1,7 @@
 corp.txt
 dialogs/
+reddit_data/
+output/
 pretrained-bert-base-uncased/
 bert/checkpoints/
 *.tgz
