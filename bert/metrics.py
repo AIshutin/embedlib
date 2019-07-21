@@ -24,6 +24,7 @@ def calc_mrr(X, Y):
 				mrr += 1 / (j + 1)
 				break
 	mrr /= n
+	assert(mrr <= 1.01)
 	return mrr
 
 def get_mean_score_on_data(metric, data, model, tokenizer):
@@ -33,13 +34,11 @@ def get_mean_score_on_data(metric, data, model, tokenizer):
 	qembedder.eval()
 	aembedder.eval()
 	score = 0
-	batch_size = None
+	testbatch_cnt = 0
 	with torch.no_grad():
 		for batch in data:
 			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder)
-			if batch_size is None:
-				batch_size = embeddings[0].shape[0]
 			score += metric(*embeddings)
-	testbatch_cnt = (len(data) - 1) / batch_size + 1
+			testbatch_cnt += 1
 	score /= testbatch_cnt
 	return score

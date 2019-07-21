@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-from pytorch_pretrained_bert import BertTokenizer, BertForQuestionAnswering
-from pytorch_pretrained_bert import BertModel, BertConfig
-from pytorch_pretrained_bert.optimization import BertAdam
+from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
+from pytorch_transformers import BertModel, BertConfig
+from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
 
 import numpy as np
 import pickle
@@ -13,12 +13,13 @@ import tqdm
 
 import metrics
 import losses
-from utils import get_optimizer_params, embed_batch, prepare_batch
+from utils import embed_batch, prepare_batch
 from utils import load_model, save_model
 from datasets import UbuntuCorpus
 
 from sacred import Experiment
 import logging
+import os
 
 ex = Experiment()
 
@@ -34,7 +35,7 @@ def config():
 	criterion_func = 'hinge_loss'
 	batch_size = 10 # 16, 32 are recommended in the paper
 
-	max_dataset_size = int(1e6)
+	max_dataset_size = int(1e2)
 
 	# BERT config
 	max_seq_len = 512
@@ -66,13 +67,16 @@ def get_model(bert_type, cache_dir):
 	tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
 	qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
 	aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+	qembedder.config.output_hidden_states = True
+	aembedder.config.output_hidden_states = True
+
 	model = (qembedder, aembedder)
 
 	return tokenizer, model
 
 
 @ex.automain
-def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir):
+def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, criterion_func):
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 	tokenizer, (qembedder, aembedder) = get_model()
@@ -86,15 +90,15 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir):
 
 	num_train_optimization_steps = len(train) * epochs
 
-	qoptim = BertAdam(get_optimizer_params(qembedder),
-						lr=learning_rate,
-						warmup=warmup,
-						t_total=num_train_optimization_steps)
+	num_warmup_steps = int(warmup * num_train_optimization_steps)
 
-	aoptim = BertAdam(get_optimizer_params(aembedder),
-						lr=learning_rate,
-						warmup=warmup,
-						t_toal=num_train_optimization_steps)
+	qoptim = AdamW(qembedder.parameters(), lr=learning_rate, correct_bias=False)
+	qscheduler = WarmupLinearSchedule(qoptim, warmup_steps=num_warmup_steps, \
+									t_total=num_train_optimization_steps)
+
+	aoptim = AdamW(aembedder.parameters(), lr=learning_rate, correct_bias=False)
+	ascheduler = WarmupLinearSchedule(aoptim, warmup_steps=num_warmup_steps, \
+									t_total=num_train_optimization_steps)
 
 	score_before_finetuning = metrics.get_mean_score_on_data(metric, test, \
 															(qembedder, aembedder), \
@@ -119,6 +123,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir):
 			total_loss += loss.item()
 			loss.backward()
 
+			qscheduler.step()
+			ascheduler.step()
 			qoptim.step()
 			aoptim.step()
 
@@ -127,13 +133,13 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir):
 											(qembedder, aembedder), \
 											tokenizer)
 		_log.info(f'score:{score:9.4f} | loss:{total_loss:9.4f} ')
+		checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{score:9.4f} {criterion_func}:{total_loss:9.4f}/"
+		save_model((qembedder, aembedder), tokenizer, checkpoint_name)
 
 	_log.info('Fine-tuning is compleated')
 	if torch.cuda.is_available():
 		torch.cuda.empty_cache()
 
 	# ToDo save model
-	save_model((qembedder, aembedder), checkpoint_dir)
-	#load_model(checkpoint_dir)
 
 ex.run()

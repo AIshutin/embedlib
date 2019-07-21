@@ -1,7 +1,8 @@
 import re
+import os
 import torch
-from pytorch_pretrained_bert import BertTokenizer, BertForQuestionAnswering
-from pytorch_pretrained_bert import BertModel, BertConfig
+from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
+from pytorch_transformers import BertModel, BertConfig
 
 def remove_urls (vTEXT):
 	# r'http\S+'
@@ -36,11 +37,11 @@ def prepare_batch(batch, device, tokenizer):
 
 def get_embedding(embeddings):
 	'''
-	using default bert-as-service strategy to get fixed-size vector
-	1. considering only -2 layer
+	using bert-as-service-like strategy to get fixed-size vector
+	1. considering only -1 layer (NOT -2 as in bert-as-service)
 	2. "REDUCE_MEAN take the average of the hidden state of encoding layer on the time axis" @bert-as-service
 	'''
-	embeddings = embeddings[-2]
+	#print('get_embedding', embeddings.shape)
 	result = torch.sum(embeddings, dim=1)
 
 	return result
@@ -48,7 +49,7 @@ def get_embedding(embeddings):
 def embed_batch(batch, qembedder, aembedder):
 	((quests, quest_segments), (answs, answ_segments)) = batch
 
-	tmp_quest = [get_embedding(qembedder(quests[i], quest_segments[i])[0]) for i in range(len(quests))]
+	tmp_quest = [get_embedding(qembedder(quests[i], quest_segments[i], )[0]) for i in range(len(quests))]
 	tmp_answ = [get_embedding(aembedder(answs[i], answ_segments[i])[0]) for i in range(len(answs))]
 
 	qembeddings = torch.cat(tmp_quest)
@@ -62,34 +63,19 @@ def print_batch(batch):
 		print('>>> ', batch[1][i])
 	print()
 
-def get_optimizer_params(model):
-  param_optimizer = list(model.named_parameters())
-  no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-
-  optimizer_grouped_parameters = [
-     {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-			{'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-  ]
-
-  return optimizer_grouped_parameters
-
-qembedder_save_file = 'qembedder.bin'
-aembedder_save_file = 'aembedder.bin'
-config_save_file = 'config.bin'
-
 def load_model(checkpoint_dir):
-	config = BertConfig.from_json_file(checkpoint_dir + config_save_file)
-	qembedder = BertModel(config)
-	aembedder = BertModel(config)
-	qstate_dict = torch.load(checkpoint_dir + qembedder_save_file)
-	astate_dict = torch.load(checkpoint_dir + aembedder_save_file)
-	qembedder.load_state_dict(qstate_dict)
-	aembedder.load_state_dict(astate_dict)
-	#tokenizer = BertTokenizer(checkpoint_dir, do_lower_case=True)
-	return (qembedder, aembedder)
+	print(checkpoint_dir )
+	qembedder = BertModel.from_pretrained(checkpoint_dir + 'qembedder/')
+	aembedder = BertModel.from_pretrained(checkpoint_dir + 'aembedder/')
+	tokenizer = BertTokenizer(checkpoint_dir)
+	return (qembedder, aembedder), tokenizer
 
-def save_model(model, checkpoint_dir):
-	torch.save(model[0].state_dict(), checkpoint_dir + qembedder_save_file)
-	torch.save(model[1].state_dict(), checkpoint_dir + aembedder_save_file)
-	model[0].config.to_json_file(checkpoint_dir + config_save_file)
-	#tokenizer.save_vocabulary(checkpoint_dir)
+def save_model(model, tokenizer, checkpoint_dir):
+	os.system(f'mkdir "{checkpoint_dir}"')
+	qname = checkpoint_dir + 'qembedder/'
+	aname = checkpoint_dir + 'aembedder/'
+	os.system(f'mkdir "{qname}"')
+	os.system(f'mkdir "{aname}"')
+	model[0].save_pretrained(qname)
+	model[1].save_pretrained(aname)
+	tokenizer.save_pretrained(checkpoint_dir)
