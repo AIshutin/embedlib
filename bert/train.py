@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-from pytorch_pretrained_bert import BertTokenizer, BertForQuestionAnswering, BertModel
+from pytorch_pretrained_bert import BertTokenizer, BertForQuestionAnswering
+from pytorch_pretrained_bert import BertModel, BertConfig
 from pytorch_pretrained_bert.optimization import BertAdam
 
 import numpy as np
@@ -13,6 +14,7 @@ import tqdm
 import metrics
 import losses
 from utils import get_optimizer_params, embed_batch, prepare_batch
+from utils import load_model, save_model
 from datasets import UbuntuCorpus
 
 from sacred import Experiment
@@ -23,7 +25,7 @@ ex = Experiment()
 @ex.config
 def config():
 	test_split = 0.2
-	checkpoint_dir = "checkpoints"
+	checkpoint_dir = "checkpoints/"
 	learning_rate = 5e-5 # 5e-5, 3e-5, 2e-5 are recommended in the paper
 	epochs = 3
 	warmup = 0.1
@@ -32,12 +34,12 @@ def config():
 	criterion_func = 'hinge_loss'
 	batch_size = 10 # 16, 32 are recommended in the paper
 
-	max_dataset_size = int(1e5)
+	max_dataset_size = int(1e6)
 
 	# BERT config
 	max_seq_len = 512
 	bert_type = 'bert-base-uncased'
-	cache_dir = '../pretrained-' + bert_type
+	cache_dir = '../pretrained-' + bert_type + '/'
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size):
@@ -68,12 +70,9 @@ def get_model(bert_type, cache_dir):
 
 	return tokenizer, model
 
-@ex.capture
-def save_model(model, checkpoint_dir):
-	pass
 
 @ex.automain
-def train(_log, epochs, batch_size, learning_rate, warmup):
+def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir):
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 	tokenizer, (qembedder, aembedder) = get_model()
@@ -127,13 +126,14 @@ def train(_log, epochs, batch_size, learning_rate, warmup):
 		score = metrics.get_mean_score_on_data(metric, test, \
 											(qembedder, aembedder), \
 											tokenizer)
-		_log.info(f'score {score:9.4f} | loss:bert {total_loss:9.4f} ')
+		_log.info(f'score:{score:9.4f} | loss:{total_loss:9.4f} ')
 
 	_log.info('Fine-tuning is compleated')
 	if torch.cuda.is_available():
 		torch.cuda.empty_cache()
 
 	# ToDo save model
-	save_model((qembedder, aembedder))
+	save_model((qembedder, aembedder), checkpoint_dir)
+	#load_model(checkpoint_dir)
 
 ex.run()

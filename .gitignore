@@ -1,6 +1,7 @@
 corp.txt
 dialogs/
 pretrained-bert-base-uncased/
+bert/checkpoints/
 *.tgz
 
 # Byte-compiled / optimized / DLL files

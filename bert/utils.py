@@ -1,5 +1,7 @@
 import re
 import torch
+from pytorch_pretrained_bert import BertTokenizer, BertForQuestionAnswering
+from pytorch_pretrained_bert import BertModel, BertConfig
 
 def remove_urls (vTEXT):
 	# r'http\S+'
@@ -70,3 +72,24 @@ def get_optimizer_params(model):
   ]
 
   return optimizer_grouped_parameters
+
+qembedder_save_file = 'qembedder.bin'
+aembedder_save_file = 'aembedder.bin'
+config_save_file = 'config.bin'
+
+def load_model(checkpoint_dir):
+	config = BertConfig.from_json_file(checkpoint_dir + config_save_file)
+	qembedder = BertModel(config)
+	aembedder = BertModel(config)
+	qstate_dict = torch.load(checkpoint_dir + qembedder_save_file)
+	astate_dict = torch.load(checkpoint_dir + aembedder_save_file)
+	qembedder.load_state_dict(qstate_dict)
+	aembedder.load_state_dict(astate_dict)
+	#tokenizer = BertTokenizer(checkpoint_dir, do_lower_case=True)
+	return (qembedder, aembedder)
+
+def save_model(model, checkpoint_dir):
+	torch.save(model[0].state_dict(), checkpoint_dir + qembedder_save_file)
+	torch.save(model[1].state_dict(), checkpoint_dir + aembedder_save_file)
+	model[0].config.to_json_file(checkpoint_dir + config_save_file)
+	#tokenizer.save_vocabulary(checkpoint_dir)
