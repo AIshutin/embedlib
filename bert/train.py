@@ -18,10 +18,13 @@ from utils import load_model, save_model
 from datasets import UbuntuCorpus
 
 from sacred import Experiment
+from sacred.observers import MongoObserver, TelegramObserver
+
 import logging
 import os
 
 ex = Experiment()
+ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
 @ex.config
 def config():
