@@ -122,6 +122,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 	_log.info("  Num steps = %d", num_train_optimization_steps)
 	_log.info(f"Score before fine-tuning: {score_before_finetuning:9.4f}")
 	_log.info(f'Random choice score: {metric_baseline(batch_size):9.4f}')
+	writer.add_scalar('finetuning/metric_score', score_before_finetuning, 0)
 
 	step = 0
 	for epoch in range(epochs):
@@ -137,7 +138,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 			loss = criterion(*embeddings)
 
 			total_loss += loss.item()
-			writer.add_scalar('data/loss_dynamic', loss.item(), step)
+			writer.add_scalar('finetuning/loss_dynamic', loss.item(), step)
 			step += 1
 			loss.backward()
 
@@ -150,9 +151,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 		score = metrics.get_mean_score_on_data(metric, test, \
 											(qembedder, aembedder), \
 											tokenizer, float_mode)
-
-		writer.add_scalar('data/score', score, epoch)
-		writer.add_scalar('data/total_loss', total_loss, epoch)
+		writer.add_scalar('finetuning/metric_score', score, epoch + 1)
+		writer.add_scalar('finetuning/total_loss', total_loss, epoch)
 		_log.info(f'score:{score:9.4f} | loss:{total_loss:9.4f} ')
 		checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{score:9.4f} {criterion_func}:{total_loss:9.4f}/"
 		save_model((qembedder, aembedder), tokenizer, checkpoint_name)
