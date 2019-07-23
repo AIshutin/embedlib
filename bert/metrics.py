@@ -37,18 +37,23 @@ def calc_random_mrr(batch_size):
 	    mrrs += 1 / i
 	return mrrs / batch_size
 
-def get_mean_score_on_data(metric, data, model, tokenizer, float_mode):
+def get_mean_on_data(metric, data, model, tokenizer, float_mode):
+	if type(metric) != type(list()) and type(metric) != type(tuple()):
+		metric = [metric]
+	results = [None] * len(metric)
 	qembedder, aembedder = model
 	device = next(qembedder.parameters()).device
-
 	qembedder.eval()
 	aembedder.eval()
-	score = 0
 	testbatch_cnt = 0
 	with torch.no_grad():
 		for batch in data:
 			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder, float_mode)
-			score += metric(*embeddings)
+			for i in range(len(metric)):
+				curr = metric[i](*embeddings)
+				if results[i] is None:
+					results[i] = curr
+				else:
+					results[i] += curr
 			testbatch_cnt += 1
-	score /= testbatch_cnt
-	return score
+	return [el / testbatch_cnt for el in results]

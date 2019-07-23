@@ -13,6 +13,7 @@ import pickle
 import tqdm
 
 import metrics
+from metrics import get_mean_on_data
 import losses
 from utils import embed_batch, prepare_batch
 from utils import load_model, save_model
@@ -27,7 +28,9 @@ import os
 ex = Experiment()
 #ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
-writer = SummaryWriter()
+
+
+was = False
 
 @ex.config
 def config():
@@ -90,8 +93,13 @@ def get_model(bert_type, cache_dir, float_mode):
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
 		metric_baseline_func, criterion_func, float_mode,):
+	global was
+	if was:
+		return
+	else:
+		was = True
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+	writer = SummaryWriter()
 	tokenizer, (qembedder, aembedder) = get_model()
 	qembedder.to(device)
 	aembedder.to(device)
@@ -114,21 +122,26 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 	ascheduler = WarmupLinearSchedule(aoptim, warmup_steps=num_warmup_steps, \
 									t_total=num_train_optimization_steps)
 
-	score_before_finetuning = metrics.get_mean_score_on_data(metric, test, \
+	val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], test, \
 															(qembedder, aembedder), \
 															tokenizer, float_mode)
 
 	_log.info("***** Running training *****")
 	_log.info("  Num steps = %d", num_train_optimization_steps)
-	_log.info(f"Score before fine-tuning: {score_before_finetuning:9.4f}")
+	_log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
+	_log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
 	_log.info(f'Random choice score: {metric_baseline(batch_size):9.4f}')
-	writer.add_scalar('finetuning/metric_score', score_before_finetuning, 0)
+	writer.add_scalar('val/score', val_score_before, 0)
+	writer.add_scalar('val/loss', val_loss_before, 0)
 
 	step = 0
 	for epoch in range(epochs):
 		total_loss = 0
 		qembedder.train()
 		aembedder.train()
+		total_train_score = 0
+		total_mrr = 0
+		batch_num = 0
 
 		for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
 			qoptim.zero_grad()
@@ -136,10 +149,15 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
 			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder, float_mode)
 			loss = criterion(*embeddings)
+			score = metric(*embeddings)
+			total_train_score += score
+
+			writer.add_scalar('train/loss_dynamic', loss.item(), step)
+			writer.add_scalar('train/score_dynamic', score, step)
+			step += 1
+			batch_num += 1
 
 			total_loss += loss.item()
-			writer.add_scalar('finetuning/loss_dynamic', loss.item(), step)
-			step += 1
 			loss.backward()
 
 			qscheduler.step()
@@ -147,14 +165,19 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 			qoptim.step()
 			aoptim.step()
 
+		mean_train_score = total_train_score / batch_num
+
 		# ToDo do something with score
-		score = metrics.get_mean_score_on_data(metric, test, \
+		val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
 											(qembedder, aembedder), \
 											tokenizer, float_mode)
-		writer.add_scalar('finetuning/metric_score', score, epoch + 1)
-		writer.add_scalar('finetuning/total_loss', total_loss, epoch)
-		_log.info(f'score:{score:9.4f} | loss:{total_loss:9.4f} ')
-		checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{score:9.4f} {criterion_func}:{total_loss:9.4f}/"
+		writer.add_scalar('val/score', val_score, epoch + 1)
+		writer.add_scalar('val/loss', val_loss, epoch + 1)
+		writer.add_scalar('train/total_loss', total_loss, epoch)
+		writer.add_scalar('train/total_score', mean_train_score, epoch)
+
+		_log.info(f'score:{val_score:9.4f} | loss:{total_loss:9.4f} ')
+		checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
 		save_model((qembedder, aembedder), tokenizer, checkpoint_name)
 
 	_log.info('Fine-tuning is compleated')

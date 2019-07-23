@@ -47,7 +47,7 @@ class UbuntuCorpus(Dataset):
 					  and len(tokenizer.tokenize(replicas[i])) <= max_seq_len \
 					  and len(tokenizer.tokenize(replicas[i + 1])) <= max_seq_len:
 						qa_pairs.append([replicas[i], replicas[i + 1]])
-						_cnt -= 1
+						_score_cnt -= 1
 						if _cnt <=0:
 							break
 				if _cnt <= 0:
@@ -78,15 +78,15 @@ class TwittCorpus(Dataset):
 		\n
 		...
 		'''
-		super(twitt_dataset, self).__init__()
+		super().__init__()
 		with open(path, 'r') as f:
 			reps = f.readlines()
 		dgs = [list(group) for k, group in groupby(reps, lambda x: x == '\n') if not k]
 		good = []
 		for el in dgs:
-			el[0] = el[0].remove('[SEP]', '').rstrip()
-			el[1] = el[1].remove('[SEP]', '').rstrip()
-			if max(len(tokenize.tokenizer(el[0])), len(tokenize.tokenizer(el[1]))) <= max_seq_len:
+			el[0] = el[0].replace('[SEP]', '').rstrip()
+			el[1] = el[1].replace('[SEP]', '').rstrip()
+			if max(len(tokenizer.tokenize(el[0])), len(tokenizer.tokenize(el[1]))) <= max_seq_len:
 				good.append(el)
 				if len(good) == max_dataset_size:
 					break
