@@ -57,10 +57,10 @@ def print_batch(batch):
 	print()
 
 def load_model(checkpoint_dir):
-	print(checkpoint_dir )
+	print(checkpoint_dir)
 	qembedder = BertModel.from_pretrained(checkpoint_dir + 'qembedder/')
 	aembedder = BertModel.from_pretrained(checkpoint_dir + 'aembedder/')
-	tokenizer = BertTokenizer(checkpoint_dir)
+	tokenizer = BertTokenizer.from_pretrained(checkpoint_dir)
 	return (qembedder, aembedder), tokenizer
 
 def save_model(model, tokenizer, checkpoint_dir):

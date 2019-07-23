@@ -16,7 +16,7 @@ def calc_accuracy(X, Y):
 def calc_random_accuracy(batch_size):
 	return 1 / N_batch
 
-def calc_mrr(X, Y):
+def calc_mrr(X, Y, silent=True):
 	csim = cosine_similarity_table(X, Y)
 	n = csim.shape[0]
 	mrr = 0
@@ -25,6 +25,7 @@ def calc_mrr(X, Y):
 		arr.sort(reverse=True)
 		for j in range(len(arr)):
 			if arr[j][1] == i:
+				print(f'q{i} right pos: {j}')
 				mrr += 1 / (j + 1)
 				break
 	mrr /= n

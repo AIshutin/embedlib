@@ -47,7 +47,7 @@ def config():
 	batch_size = 16 # 16, 32 are recommended in the paper
 
 	float_mode = 'fp32'
-	max_dataset_size = int(1e4)
+	max_dataset_size = int(1e5)
 
 	# BERT config
 	max_seq_len = 512
@@ -57,7 +57,7 @@ def config():
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size):
 	corpus = TwittCorpus(tokenizer, '../corp.txt', max_seq_len, max_dataset_size)
-	_log.info(f'Corpus length: {len(corpus)}')
+	_log.info(f'Corpus size: {len(corpus)}')
 	test_size = int(len(corpus) * test_split)
 	train_size = len(corpus) - test_size
 	train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
@@ -89,10 +89,9 @@ def get_model(bert_type, cache_dir, float_mode):
 
 	return tokenizer, model
 
-
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
-		metric_baseline_func, criterion_func, float_mode,):
+		metric_baseline_func, criterion_func, float_mode, metric_name):
 	global was
 	if was:
 		return
@@ -105,7 +104,14 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 	aembedder.to(device)
 
 	train, test = get_data(_log, '.', tokenizer)
-
+	writer.add_text('config', f'train dataset size: {len(train)*batch_size}', 0)
+	writer.add_text('config', f'batch_size: {batch_size}', 1)
+	writer.add_text('config', f'learning_rate: {learning_rate}', 2)
+	writer.add_text('config', f'metic: {metric_name}', 3)
+	writer.add_text('config', f'loss: {criterion_func}', 4)
+	writer.add_text('config', f'float_mode: {float_mode}', 5)
+	writer.add_text('config', f'epochs: {epochs}', 6)
+	writer.add_text('config', f'warmup: {warmup}', 7)
 	metric = get_metric()
 	metric_baseline = get_metric(metric_baseline_func)
 	criterion = get_criterion()
@@ -183,8 +189,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 	_log.info('Fine-tuning is compleated')
 	if torch.cuda.is_available():
 		torch.cuda.empty_cache()
-
+	writer.add_text('status', 'compleated', 0)
+	writer.close()
 	# ToDo save model
 
 ex.run()
-writer.close()
