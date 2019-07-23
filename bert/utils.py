@@ -12,15 +12,8 @@ def remove_urls (vTEXT):
 
 def prepare_batch(batch, device, tokenizer):
 	(quests, answs) = batch
-	#print(quests)
 	quests = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in quests]
 	answs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in answs]
-	#print(quests)
-	#print(quests)
-	#print(quests[0].shape)
-
-	#quest_segments = [torch.zeros(len(quests[i]), 1, device=device) for i in range(len(quests))]
-	#answ_segments = [torch.zeros(len(answs[i]), 1, device=device) for i in range(len(answs))]
 
 	quest_segments = [torch.tensor([[0 for i in range(len(quests[j]))]], device=device) \
 															for j in range(len(quests))]
@@ -29,9 +22,6 @@ def prepare_batch(batch, device, tokenizer):
 
 	quests = [torch.tensor([el], device=device) for el in quests]
 	answs = [torch.tensor([el], device=device) for el in answs]
-
-	#print(quests)
-	#print(quest_segments)
 
 	return ((quests, quest_segments), (answs, answ_segments))
 
@@ -46,14 +36,17 @@ def get_embedding(embeddings):
 
 	return result
 
-def embed_batch(batch, qembedder, aembedder):
+def embed_batch(batch, qembedder, aembedder, float_mode):
 	((quests, quest_segments), (answs, answ_segments)) = batch
 
-	tmp_quest = [get_embedding(qembedder(quests[i], quest_segments[i], )[0]) for i in range(len(quests))]
+	tmp_quest = [get_embedding(qembedder(quests[i], quest_segments[i])[0]) for i in range(len(quests))]
 	tmp_answ = [get_embedding(aembedder(answs[i], answ_segments[i])[0]) for i in range(len(answs))]
 
 	qembeddings = torch.cat(tmp_quest)
 	aembeddings = torch.cat(tmp_answ)
+
+	if float_mode == 'fp16':
+		return (qembeddings.half(), aembeddings.half())
 
 	return (qembeddings, aembeddings)
 

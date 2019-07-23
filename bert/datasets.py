@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 import os
 import csv
 from utils import remove_urls
+from itertools import groupby
 
 class UbuntuCorpus(Dataset):
 	def __init__(self, tokenizer, dir='./dialogs', max_seq_len=512, _cnt=30):
@@ -69,7 +70,7 @@ class UbuntuCorpus(Dataset):
 
 
 class TwittCorpus(Dataset):
-	def __init__(self, tokenizer, path='corp (1).txt'):
+	def __init__(self, tokenizer, path='corp.txt', max_seq_len=512, max_dataset_size=100):
 		'''
 		Gets Path to TXT file in format
 		[CLS] Qestion [SEP] \n
@@ -77,14 +78,19 @@ class TwittCorpus(Dataset):
 		\n
 		...
 		'''
-		super(twitt_dataset, self).__init__()
+		super(TwittCorpus, self).__init__()
 		with open(path, 'r') as f:
 			reps = f.readlines()
 		dgs = [list(group) for k, group in groupby(reps, lambda x: x == '\n') if not k]
-		for i in range(len(dgs)):
-			dgs[i][0] = dgs[i][0].remove('[SEP]', '').rstrip()
-			dgs[i][1] = dgs[i][1].remove('[SEP]', '').rstrip()
-		self.qa_s = dgs
+		good = []
+		for el in dgs:
+			el[0] = el[0].replace('[SEP]', '').rstrip()
+			el[1] = el[1].replace('[SEP]', '').rstrip()
+			if max(len(tokenizer.tokenize(el[0])), len(tokenizer.tokenize(el[1]))) <= max_seq_len:
+				good.append(el)
+				if len(good) == max_dataset_size:
+					break
+		self.qa_s = good
 
 	def __len__(self):
 		return len(self.qa_s)

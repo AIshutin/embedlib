@@ -4,6 +4,7 @@ reddit_data/
 output/
 pretrained-bert-base-uncased/
 bert/checkpoints/
+bert/runs/
 *.tgz
 
 # Byte-compiled / optimized / DLL files
