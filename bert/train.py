@@ -28,8 +28,6 @@ import os
 ex = Experiment()
 #ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
-
-
 was = False
 
 @ex.config
