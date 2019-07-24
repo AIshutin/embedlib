@@ -23,6 +23,8 @@ def bce_loss(X, Y, conf_true=0.9, conf_false=0.1):
 
 def hinge_loss(X, Y, margin=0.1):
 	batch_size = X.shape[0]
+	print(X.shape[0], Y.shape[0])
+	assert(X.shape[0] == Y.shape[0])
 	similarities = cosine_similarity_table(X, Y)
 
 	identity = torch.eye(batch_size, device=X.device)

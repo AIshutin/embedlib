@@ -86,8 +86,10 @@ class TwittCorpus(Dataset):
 		for el in dgs:
 			el[0] = el[0].replace('[SEP]', '').rstrip()
 			el[1] = el[1].replace('[SEP]', '').rstrip()
-			if max(len(tokenizer.tokenize(el[0])), len(tokenizer.tokenize(el[1]))) <= max_seq_len:
-				good.append(el)
+			qtok = tokenizer.encode(el[0])
+			atok = tokenizer.encode(el[1])
+			if max(len(qtok), len(atok)) <= max_seq_len:
+				good.append((qtok, atok))
 				if len(good) == max_dataset_size:
 					break
 		self.qa_s = good

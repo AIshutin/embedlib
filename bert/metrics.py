@@ -25,7 +25,8 @@ def calc_mrr(X, Y, silent=True):
 		arr.sort(reverse=True)
 		for j in range(len(arr)):
 			if arr[j][1] == i:
-				print(f'q{i} right pos: {j}')
+				if not silent:
+					print(f'q{i} right pos: {j}')
 				mrr += 1 / (j + 1)
 				break
 	mrr /= n
@@ -38,7 +39,7 @@ def calc_random_mrr(batch_size):
 	    mrrs += 1 / i
 	return mrrs / batch_size
 
-def get_mean_on_data(metric, data, model, tokenizer, float_mode):
+def get_mean_on_data(metric, data, model, float_mode):
 	if type(metric) != type(list()) and type(metric) != type(tuple()):
 		metric = [metric]
 	results = [None] * len(metric)
@@ -49,7 +50,7 @@ def get_mean_on_data(metric, data, model, tokenizer, float_mode):
 	testbatch_cnt = 0
 	with torch.no_grad():
 		for batch in data:
-			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder, float_mode)
+			embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
 			for i in range(len(metric)):
 				curr = metric[i](*embeddings)
 				if results[i] is None:
