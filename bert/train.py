@@ -17,7 +17,7 @@ from metrics import get_mean_on_data
 import losses
 from utils import embed_batch, prepare_batch
 from utils import load_model, save_model
-from datasets import UbuntuCorpus, TwittCorpus
+from datasets import UbuntuCorpus, TwittCorpus, collate_wrapper
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -45,7 +45,7 @@ def config():
 	batch_size = 16 # 16, 32 are recommended in the paper
 
 	float_mode = 'fp32'
-	max_dataset_size = int(1e5)
+	max_dataset_size = int(16)
 
 	# BERT config
 	max_seq_len = 512
@@ -59,8 +59,8 @@ def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, ma
 	test_size = int(len(corpus) * test_split)
 	train_size = len(corpus) - test_size
 	train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
-	return DataLoader(train_data, batch_size=batch_size, shuffle=True), \
-		   DataLoader(test_data, batch_size=batch_size, shuffle=True)
+	return DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper), \
+		   DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper)
 
 @ex.capture
 def get_metric(metric_func):
@@ -91,10 +91,12 @@ def get_model(bert_type, cache_dir, float_mode):
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
 		metric_baseline_func, criterion_func, float_mode, metric_name):
 	global was
+
 	if was:
 		return
 	else:
 		was = True
+
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 	writer = SummaryWriter()
 	tokenizer, (qembedder, aembedder) = get_model()
@@ -128,7 +130,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
 	val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], test, \
 															(qembedder, aembedder), \
-															tokenizer, float_mode)
+															float_mode)
 
 	_log.info("***** Running training *****")
 	_log.info("  Num steps = %d", num_train_optimization_steps)
@@ -151,7 +153,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 			qoptim.zero_grad()
 			aoptim.zero_grad()
 
-			embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder, float_mode)
+			embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
 			loss = criterion(*embeddings)
 			score = metric(*embeddings)
 			total_train_score += score
@@ -174,7 +176,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 		# ToDo do something with score
 		val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
 											(qembedder, aembedder), \
-											tokenizer, float_mode)
+											float_mode)
 		writer.add_scalar('val/score', val_score, epoch + 1)
 		writer.add_scalar('val/loss', val_loss, epoch + 1)
 		writer.add_scalar('train/total_loss', total_loss, epoch)

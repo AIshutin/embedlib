@@ -10,20 +10,15 @@ def remove_urls (vTEXT):
 	vTEXT = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[link]', vTEXT, flags=re.MULTILINE)
 	return vTEXT
 
-def prepare_batch(batch, device, tokenizer):
-	(quests, answs) = batch
-	quests = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in quests]
-	answs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(el)) for el in answs]
+def prepare_batch(batch, device):
+	quests, answs = batch.quests, batch.answs
 
-	quest_segments = [torch.tensor([[0 for i in range(len(quests[j]))]], device=device) \
-															for j in range(len(quests))]
-	answ_segments = [torch.tensor([[0 for i in range(len(answs[j] ))]], device=device) \
-															for j in range(len(answs))]
+	assert(len(quests) == len(answs))
 
 	quests = [torch.tensor([el], device=device) for el in quests]
 	answs = [torch.tensor([el], device=device) for el in answs]
 
-	return ((quests, quest_segments), (answs, answ_segments))
+	return (quests, answs)
 
 def get_embedding(embeddings):
 	'''
@@ -31,19 +26,18 @@ def get_embedding(embeddings):
 	1. considering only -1 layer (NOT -2 as in bert-as-service)
 	2. "REDUCE_MEAN take the average of the hidden state of encoding layer on the time axis" @bert-as-service
 	'''
-	#print('get_embedding', embeddings.shape)
-	result = torch.sum(embeddings, dim=1)
-
-	return result
+	return torch.sum(embeddings, dim=1)
 
 def embed_batch(batch, qembedder, aembedder, float_mode):
-	((quests, quest_segments), (answs, answ_segments)) = batch
+	quests, answs = batch
 
-	tmp_quest = [get_embedding(qembedder(quests[i], quest_segments[i])[0]) for i in range(len(quests))]
-	tmp_answ = [get_embedding(aembedder(answs[i], answ_segments[i])[0]) for i in range(len(answs))]
+	tmp_quest = [get_embedding(qembedder(quests[i])[0]) for i in range(len(quests))]
+	tmp_answ = [get_embedding(aembedder(answs[i])[0]) for i in range(len(answs))]
 
 	qembeddings = torch.cat(tmp_quest)
 	aembeddings = torch.cat(tmp_answ)
+
+	assert(qembeddings.shape == aembeddings.shape)
 
 	if float_mode == 'fp16':
 		return (qembeddings.half(), aembeddings.half())

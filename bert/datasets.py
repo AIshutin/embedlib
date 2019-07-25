@@ -3,6 +3,7 @@ import os
 import csv
 from utils import remove_urls
 from itertools import groupby
+import torch
 
 class UbuntuCorpus(Dataset):
 	def __init__(self, tokenizer, dir='./dialogs', max_seq_len=512, _cnt=30):
@@ -68,6 +69,20 @@ class UbuntuCorpus(Dataset):
 	def __getitem__(self, ind):
 		return (self.qa_pairs[ind][0], self.qa_pairs[ind][1])
 
+class TokenizedQABatch:
+    def __init__(self, data):
+        self.quests = data[0]
+        self.answs = data[1]
+        assert(len(data[0]) == len(data[1]))
+
+    def pin_memory(self):
+        for i in range(len(quests)):
+            self.quests[i].pin_memory()
+            self.answs[i].pin_memory()
+        return self
+
+def collate_wrapper(batch):
+    return TokenizedQABatch(batch)
 
 class TwittCorpus(Dataset):
 	def __init__(self, tokenizer, path='corp.txt', max_seq_len=512, max_dataset_size=100):
@@ -86,8 +101,10 @@ class TwittCorpus(Dataset):
 		for el in dgs:
 			el[0] = el[0].replace('[SEP]', '').rstrip()
 			el[1] = el[1].replace('[SEP]', '').rstrip()
-			if max(len(tokenizer.tokenize(el[0])), len(tokenizer.tokenize(el[1]))) <= max_seq_len:
-				good.append(el)
+			qtok = tokenizer.encode(el[0])
+			atok = tokenizer.encode(el[1])
+			if max(len(qtok), len(atok)) <= max_seq_len:
+				good.append([qtok, atok])
 				if len(good) == max_dataset_size:
 					break
 		self.qa_s = good
