@@ -16,15 +16,15 @@ for i in list_of_files:
     print('Downloaded ', k, ' files\nContinue? [yes/no]')
     flag = input()
     if flag == 'no':
-        break
+    break
     dwn = url  + i.strip('./')
     dwn.replace(' ','_')
     if os.path.exists('./reddit_data/'+i):
-        print('File already exist, download again? [yes/no]')
-        flag = input()
-        if flag == 'no':
-            continue
+    print('File already exist, download again? [yes/no]')
+    flag = input()
+    if flag == 'no':
+    continue
     urllib.request.urlretrieve(dwn, './reddit_data/'+i)
     k += 1
-    
+
 print('Downloaded files to /reddit_data/')
