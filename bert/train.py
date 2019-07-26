@@ -45,7 +45,7 @@ def config():
     batch_size = 16 # 16, 32 are recommended in the paper
 
     float_mode = 'fp32'
-    max_dataset_size = int(16)
+    max_dataset_size = int(1e5)
 
     # BERT config
     max_seq_len = 512
@@ -76,7 +76,7 @@ def get_criterion(criterion_func):
 def get_model(bert_type, cache_dir, float_mode):
     tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
     qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    print(qembedder)
+    #print(qembedder)
     aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
     qembedder.config.output_hidden_states = True
     aembedder.config.output_hidden_states = True
@@ -172,19 +172,12 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             qoptim.step()
             aoptim.step()
 
-def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
-        metric_baseline_func, criterion_func, float_mode, metric_name):
-    global was
-
-    if was:
-        return
-
         mean_train_score = total_train_score / batch_num
 
         # ToDo do something with score
         val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
-                                            (qembedder, aembedder), \
-                                            float_mode)
+                                        (qembedder, aembedder), \
+                                        float_mode)
         writer.add_scalar('val/score', val_score, epoch + 1)
         writer.add_scalar('val/loss', val_loss, epoch + 1)
         writer.add_scalar('train/total_loss', total_loss, epoch)
@@ -193,12 +186,5 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         _log.info(f'score:{val_score:9.4f} | loss:{total_loss:9.4f} ')
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
         save_model((qembedder, aembedder), tokenizer, checkpoint_name)
-
-    _log.info('Fine-tuning is compleated')
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    writer.add_text('status', 'compleated', 0)
-    writer.close()
-    # ToDo save model
 
 ex.run()
