@@ -1,5 +1,5 @@
 from utils import load_model
-from datasets import TwittCorpus
+from datasets import TwittCorpus, collate_wrapper
 from torch.utils.data import Dataset, DataLoader, Subset
 from utils import print_batch, embed_batch, prepare_batch
 from metrics import calc_mrr
@@ -24,12 +24,11 @@ full_dataset= TwittCorpus(tokenizer, '../corp.txt', 512, max_dataset_size + 100)
 print('full:', len(full_dataset))
 data = Subset(full_dataset, range(max_dataset_size, max_dataset_size + 100))
 print('subset:', len(data))
-loader = DataLoader(data, batch_size=batch_size)
+loader = DataLoader(data, batch_size=batch_size, collate_fn=collate_wrapper)
 
 for batch in loader:
-    print(len(batch[0]))
-    print_batch(batch)
-    embeddings = embed_batch(prepare_batch(batch, device, tokenizer), qembedder, aembedder, float_mode)
+    print_batch(batch, tokenizer)
+    embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
     calc_mrr(embeddings[0], embeddings[1], True)
 
     print()

@@ -44,10 +44,12 @@ def embed_batch(batch, qembedder, aembedder, float_mode):
 
     return (qembeddings, aembeddings)
 
-def print_batch(batch):
-    for i in range(len(batch[0])):
-        print(i, batch[0][i])
-        print('>>> ', batch[1][i])
+def print_batch(batch, tokenizer):
+    quests, answs = batch.quests, batch.answs
+
+    for i in range(len(quests)):
+        print(i, tokenizer.decode(quests[i]))
+        print('>>> ', tokenizer.decode(answs[i]))
     print()
 
 def load_model(checkpoint_dir):
