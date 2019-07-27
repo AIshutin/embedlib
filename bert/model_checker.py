@@ -9,7 +9,7 @@ import torch
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-checkpoint = "epoch: 2 calc_mrr:   0.8389 hinge_loss:   1.2523/"
+checkpoint = "epoch: 2 calc_mrr:   0.9948 hinge_loss:   3.7534" + '/'
 
 (qembedder, aembedder), tokenizer = load_model('checkpoints/' + checkpoint)
 
@@ -29,7 +29,7 @@ loader = DataLoader(data, batch_size=batch_size, collate_fn=collate_wrapper)
 for batch in loader:
     print_batch(batch, tokenizer)
     embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
-    calc_mrr(embeddings[0], embeddings[1], True)
+    calc_mrr(embeddings[0], embeddings[1], False)
 
     print()
     print()

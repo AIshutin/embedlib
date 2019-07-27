@@ -71,8 +71,11 @@ class UbuntuCorpus(Dataset):
 
 class TokenizedQABatch:
     def __init__(self, data):
-        self.quests = data[0]
-        self.answs = data[1]
+        self.quests = []
+        self.answs = []
+        for el in data:
+            self.quests.append(el[0])
+            self.answs.append(el[1])
         assert(len(data[0]) == len(data[1]))
 
     def pin_memory(self):
