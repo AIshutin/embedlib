@@ -37,18 +37,20 @@ def hinge_loss(X, Y, margin=0.1):
 
 
 def triplet_loss(X, Y, margin=0.1):
-    # https://omoindrot.github.io/triplet-loss
+    """
+    https://omoindrot.github.io/triplet-loss
+
+    qa-pair is positive
+    q-another a pair is negative
+    q-q pair is negative
+    a-a pair is negative
+
+    Approach
+    qa versus a + qa versus q
+    """
 
     batch_size = X.shape[0]
     similarities = cosine_similarity_table(X, Y)
-
-    # qa-pair is positive
-    # q-another a pair is negative
-    # q-q pair is negative
-    # a-a pair is negative
-
-    # Approach
-    # qa versus a + qa versus q
 
     right_conf = torch.eye(batch_size, device=X.device) * similarities
     max_confq, _ = similarities.max(1)

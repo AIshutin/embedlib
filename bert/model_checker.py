@@ -6,10 +6,9 @@ from metrics import calc_mrr
 import sys
 import torch
 
-
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-checkpoint = "epoch: 2 calc_mrr:   0.9948 hinge_loss:   3.7534" + '/'
+checkpoint = "epoch: 2 calc_mrr:   0.9948 hinge_loss:   3.7534" + "/"
 
 (qembedder, aembedder), tokenizer = load_model('checkpoints/' + checkpoint)
 
@@ -20,10 +19,10 @@ max_dataset_size = int(1e5)
 batch_size = 16
 float_mode = 'fp32'
 
-full_dataset= TwittCorpus(tokenizer, '../corp.txt', 512, max_dataset_size + 100)
-print('full:', len(full_dataset))
+full_dataset= TwittCorpus(tokenizer, max_dataset_size + 100)
+print(f"full: {len(full_dataset)}")
 data = Subset(full_dataset, range(max_dataset_size, max_dataset_size + 100))
-print('subset:', len(data))
+print(f"subset: {len(data)}")
 loader = DataLoader(data, batch_size=batch_size, collate_fn=collate_wrapper)
 
 for batch in loader:
