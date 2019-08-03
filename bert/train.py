@@ -17,7 +17,8 @@ from metrics import get_mean_on_data
 import losses
 from utils import embed_batch, prepare_batch
 from utils import load_model, save_model
-from datasets import UbuntuCorpus, TwittCorpus, collate_wrapper
+from datasets import collate_wrapper
+import datasets
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -26,25 +27,25 @@ import logging
 import os
 
 ex = Experiment()
-#ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
-
-was = False
+# ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
 @ex.config
 def config():
     test_split = 0.2
-    checkpoint_dir = "checkpoints/"
-    learning_rate = 5e-5 # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 3
+    checkpoint_dir = 'checkpoints/'
+    learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
+    epochs = 4
     warmup = 0.1
 
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
-    criterion_func = 'hinge_loss'
-    batch_size = 16 # 16, 32 are recommended in the paper
+    criterion_func = 'triplet_loss'
+    batch_size = 16  # 16, 32 are recommended in the paper
 
     float_mode = 'fp32'
+
+    dataset_name = 'TwittCorpus'
     max_dataset_size = int(1e5)
 
     # BERT config
@@ -53,9 +54,10 @@ def config():
     cache_dir = '../pretrained-' + bert_type + '/'
 
 @ex.capture
-def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size):
-    corpus = TwittCorpus(tokenizer, '../corp.txt', max_seq_len, max_dataset_size)
-    _log.info(f'Corpus size: {len(corpus)}')
+def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
+            dataset_name):
+    corpus = getattr(datasets, dataset_name)(tokenizer, max_dataset_size)
+    _log.info(f"Corpus size: {len(corpus)}")
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
@@ -76,7 +78,6 @@ def get_criterion(criterion_func):
 def get_model(bert_type, cache_dir, float_mode):
     tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
     qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    #print(qembedder)
     aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
     qembedder.config.output_hidden_states = True
     aembedder.config.output_hidden_states = True
@@ -91,12 +92,6 @@ def get_model(bert_type, cache_dir, float_mode):
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, float_mode, metric_name):
-    global was
-
-    if was:
-        return
-    else:
-        was = True
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     writer = SummaryWriter()
@@ -105,14 +100,6 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     aembedder.to(device)
 
     train, test = get_data(_log, '.', tokenizer)
-    writer.add_text('config', f'train dataset size: {len(train)*batch_size}', 0)
-    writer.add_text('config', f'batch_size: {batch_size}', 1)
-    writer.add_text('config', f'learning_rate: {learning_rate}', 2)
-    writer.add_text('config', f'metic: {metric_name}', 3)
-    writer.add_text('config', f'loss: {criterion_func}', 4)
-    writer.add_text('config', f'float_mode: {float_mode}', 5)
-    writer.add_text('config', f'epochs: {epochs}', 6)
-    writer.add_text('config', f'warmup: {warmup}', 7)
     metric = get_metric()
     metric_baseline = get_metric(metric_baseline_func)
     criterion = get_criterion()
@@ -137,9 +124,9 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     _log.info("  Num steps = %d", num_train_optimization_steps)
     _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
-    _log.info(f'Random choice score: {metric_baseline(batch_size):9.4f}')
-    writer.add_scalar('val/score', val_score_before, 0)
-    writer.add_scalar('val/loss', val_loss_before, 0)
+    _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
+    writer.add_scalar("val/score", val_score_before, 0)
+    writer.add_scalar("val/loss", val_loss_before, 0)
 
     step = 0
     for epoch in range(epochs):
@@ -159,8 +146,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             score = metric(*embeddings)
             total_train_score += score
 
-            writer.add_scalar('train/loss_dynamic', loss.item(), step)
-            writer.add_scalar('train/score_dynamic', score, step)
+            writer.add_scalar("train/loss_dynamic", loss.item(), step)
+            writer.add_scalar("train/score_dynamic", score, step)
             step += 1
             batch_num += 1
 
@@ -178,13 +165,11 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
                                         (qembedder, aembedder), \
                                         float_mode)
-        writer.add_scalar('val/score', val_score, epoch + 1)
-        writer.add_scalar('val/loss', val_loss, epoch + 1)
-        writer.add_scalar('train/total_loss', total_loss, epoch)
-        writer.add_scalar('train/total_score', mean_train_score, epoch)
+        writer.add_scalar("val/score", val_score, epoch + 1)
+        writer.add_scalar("val/loss", val_loss, epoch + 1)
+        writer.add_scalar("train/total_loss", total_loss, epoch)
+        writer.add_scalar("train/total_score", mean_train_score, epoch)
 
-        _log.info(f'score:{val_score:9.4f} | loss:{total_loss:9.4f} ')
+        _log.info(f"score:{val_score:9.4f} | loss:{total_loss:9.4f}")
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
         save_model((qembedder, aembedder), tokenizer, checkpoint_name)
-
-ex.run()

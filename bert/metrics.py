@@ -8,7 +8,7 @@ def calc_accuracy(X, Y):
     csim = cosine_similarity_table(X, Y)
     confidence, predictions = csim.max(-1)
     correct = 0
-    # ToDo: numpy
+    # ToDo: numpy/pytorch
     for i in range(predictions.shape[0]):
         correct += predictions[i] == i
     return correct / X.shape[0]
@@ -26,7 +26,7 @@ def calc_mrr(X, Y, silent=True):
         for j in range(len(arr)):
             if arr[j][1] == i:
                 if not silent:
-                    print(f'q{i} right pos: {j}')
+                    print(f"q{i} right pos: {j}")
                 mrr += 1 / (j + 1)
                 break
     mrr /= n

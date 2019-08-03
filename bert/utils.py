@@ -49,7 +49,7 @@ def print_batch(batch, tokenizer):
 
     for i in range(len(quests)):
         print(i, tokenizer.decode(quests[i]))
-        print('>>> ', tokenizer.decode(answs[i]))
+        print(">>> ", tokenizer.decode(answs[i]))
     print()
 
 def load_model(checkpoint_dir):

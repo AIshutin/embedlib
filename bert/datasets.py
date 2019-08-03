@@ -6,7 +6,7 @@ from itertools import groupby
 import torch
 
 class UbuntuCorpus(Dataset):
-    def __init__(self, tokenizer, dir='./dialogs', max_seq_len=512, _cnt=30):
+    def __init__(self, tokenizer, _cnt=30, dir='../dialogs', max_seq_len=512):
         super().__init__()
         dialogs = []
         thr = 30
@@ -88,7 +88,7 @@ def collate_wrapper(batch):
     return TokenizedQABatch(batch)
 
 class TwittCorpus(Dataset):
-    def __init__(self, tokenizer, path='corp.txt', max_seq_len=512, max_dataset_size=100):
+    def __init__(self, tokenizer, max_dataset_size=100, path='../corp.txt', max_seq_len=512):
         '''
         Gets Path to TXT file in format
         [CLS] Qestion [SEP] \n
