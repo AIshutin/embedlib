@@ -8,9 +8,12 @@ import torch
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-checkpoint = "epoch: 2 calc_mrr:   0.9948 hinge_loss:   3.7534" + "/"
+if len(sys.argv) >= 2:
+    checkpoint = sys.argv[1]
+else:
+    checkpoint = 'checkpoints/epoch: 2 calc_mrr:   0.9948 hinge_loss:   3.7534/'
 
-(qembedder, aembedder), tokenizer = load_model('checkpoints/' + checkpoint)
+(qembedder, aembedder), tokenizer = load_model(checkpoint)
 
 qembedder.to(device)
 aembedder.to(device)
