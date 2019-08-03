@@ -34,13 +34,13 @@ def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 3
+    epochs = 4
     warmup = 0.1
 
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
-    criterion_func = 'hinge_loss'
+    criterion_func = 'triplet_loss'
     batch_size = 16  # 16, 32 are recommended in the paper
 
     float_mode = 'fp32'
@@ -111,7 +111,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     qoptim = AdamW(qembedder.parameters(), lr=learning_rate, correct_bias=False)
     qscheduler = WarmupLinearSchedule(qoptim, warmup_steps=num_warmup_steps, \
                                     t_total=num_train_optimization_steps)
-    
+
     aoptim = AdamW(aembedder.parameters(), lr=learning_rate, correct_bias=False)
     ascheduler = WarmupLinearSchedule(aoptim, warmup_steps=num_warmup_steps, \
                                     t_total=num_train_optimization_steps)
