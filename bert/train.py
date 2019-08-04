@@ -34,18 +34,19 @@ def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 4
+    epochs = 3
     warmup = 0.1
+    lang = 'ru'
 
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
-    criterion_func = 'triplet_loss'
-    batch_size = 16  # 16, 32 are recommended in the paper
+    criterion_func = 'hinge_loss'
+    batch_size = 2  # 16, 32 are recommended in the paper
 
     float_mode = 'fp32'
 
-    dataset_name = 'TwittCorpus'
+    dataset_names = ['ru-opendialog-corpus']
     max_dataset_size = int(1e5)
 
     # BERT config
@@ -55,8 +56,8 @@ def config():
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
-            dataset_name):
-    corpus = getattr(datasets, dataset_name)(tokenizer, max_dataset_size)
+            dataset_names):
+    corpus = datasets.CorpusData(dataset_names, tokenizer, max_dataset_size)
     _log.info(f"Corpus size: {len(corpus)}")
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
@@ -75,17 +76,22 @@ def get_criterion(criterion_func):
     return criterion
 
 @ex.capture
-def get_model(bert_type, cache_dir, float_mode):
-    tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
-    qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    qembedder.config.output_hidden_states = True
-    aembedder.config.output_hidden_states = True
-    if float_mode == 'fp16':
-        qembedder.half()
-        aembedder.half()
+def get_model(bert_type, cache_dir, float_mode, lang='en'):
+    if lang == 'en':
+        tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
+        qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+        aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+        model = (qembedder, aembedder)
+    elif lang == 'ru':
+        model, tokenizer = load_model(f'../ru{bert_type}/')
+        #print(model)
 
-    model = (qembedder, aembedder)
+    model[0].config.output_hidden_states = True
+    model[1].config.output_hidden_states = True
+
+    if float_mode == 'fp16':
+        model[0].half()
+        model[1].half()
 
     return tokenizer, model
 
@@ -116,7 +122,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     ascheduler = WarmupLinearSchedule(aoptim, warmup_steps=num_warmup_steps, \
                                     t_total=num_train_optimization_steps)
 
-    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], test, \
+    '''val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], test, \
                                                             (qembedder, aembedder), \
                                                             float_mode)
 
@@ -126,7 +132,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
-    writer.add_scalar("val/loss", val_loss_before, 0)
+    writer.add_scalar("val/loss", val_loss_before, 0)'''
 
     step = 0
     for epoch in range(epochs):
