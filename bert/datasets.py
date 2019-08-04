@@ -32,9 +32,9 @@ class UbuntuCorpus(Dataset):
                     assert(len(authors) <= 2)
                 '''
                 Answer replic is a replic without ?
-                 Question replic is a replic with ? followed by answer replic
+                Question replic is a replic with ? followed by answer replic
 
-                 Both must be longer than thr (after link replacemenets)
+                Both must be longer than thr (after link replacemenets)
 
                 And due to BERT restrictions both in tokenized form must be shorter than max_seq_len
                 '''
@@ -108,7 +108,7 @@ class TwittCorpus(Dataset):
             qtok = tokenizer.encode(el[0])
             atok = tokenizer.encode(el[1])
             if max(len(qtok), len(atok)) <= max_seq_len:
-                good.append([qtok, atok])
+                good.append([el[0], el[1]])
                 if len(good) == max_dataset_size:
                     break
         self.qa_s = good
@@ -136,3 +136,4 @@ class CorpusData(Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx]
+        

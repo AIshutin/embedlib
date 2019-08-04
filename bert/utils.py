@@ -10,40 +10,6 @@ def remove_urls (vTEXT):
     vTEXT = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[link]', vTEXT, flags=re.MULTILINE)
     return vTEXT
 
-def prepare_batch(batch, device):
-    quests, answs = batch.quests, batch.answs
-
-    assert(len(quests) == len(answs))
-
-    quests = [torch.tensor([el], device=device) for el in quests]
-    answs = [torch.tensor([el], device=device) for el in answs]
-
-    return (quests, answs)
-
-def get_embedding(embeddings):
-    '''
-    using bert-as-service-like strategy to get fixed-size vector
-    1. considering only -1 layer (NOT -2 as in bert-as-service)
-    2. "REDUCE_MEAN take the average of the hidden state of encoding layer on the time axis" @bert-as-service
-    '''
-    return torch.sum(embeddings, dim=1)
-
-def embed_batch(batch, qembedder, aembedder, float_mode):
-    quests, answs = batch
-
-    tmp_quest = [get_embedding(qembedder(quests[i])[0]) for i in range(len(quests))]
-    tmp_answ = [get_embedding(aembedder(answs[i])[0]) for i in range(len(answs))]
-
-    qembeddings = torch.cat(tmp_quest)
-    aembeddings = torch.cat(tmp_answ)
-
-    assert(qembeddings.shape == aembeddings.shape)
-
-    if float_mode == 'fp16':
-        return (qembeddings.half(), aembeddings.half())
-
-    return (qembeddings, aembeddings)
-
 def print_batch(batch, tokenizer):
     quests, answs = batch.quests, batch.answs
 

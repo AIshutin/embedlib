@@ -1,0 +1,110 @@
+import torch
+from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
+from pytorch_transformers import BertModel, BertConfig
+from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+
+
+class BERTLike(torch.nn.Module):
+    max_seq_len = 512
+    __name__ = 'BERTLike'
+
+    def prepare_batch(self, batch, device):
+        quests, answs = batch.quests, batch.answs
+
+        assert(len(quests) == len(answs))
+
+        quests = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in quests]
+        answs = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in answs]
+
+        return (quests, answs)
+
+    def get_embedding(self, embeddings):
+        '''
+        using bert-as-service-like strategy to get fixed-size vector
+        1. considering only -1 layer (NOT -2 as in bert-as-service)
+        2. "REDUCE_MEAN take the average of the hidden state of encoding layer on the time axis" @bert-as-service
+        '''
+        return torch.sum(embeddings, dim=1)
+
+    def embed_batch(self, batch):
+        quests, answs = batch
+
+        tmp_quest = [self.get_embedding(self.qembedder(quests[i])[0]) for i in range(len(quests))]
+        tmp_answ = [self.get_embedding(self.aembedder(answs[i])[0]) for i in range(len(answs))]
+
+        qembeddings = torch.cat(tmp_quest)
+        aembeddings = torch.cat(tmp_answ)
+
+        assert(qembeddings.shape == aembeddings.shape)
+
+        if self.float_mode == 'fp16':
+            return (qembeddings.half(), aembeddings.half())
+
+        return (qembeddings, aembeddings)
+
+
+    def __init__(self, lang, bert_type, float_mode='fp32', cache_dir=None):
+        if cache_dir is None:
+            cache_dir = f'../{bert_type}'
+        super().__init__()
+        if lang == 'en':
+            cache_dir = '../pretrained-' + bert_type + '/'
+            self.tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
+            self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+            self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+        elif lang == 'ru':
+            pass
+        else:
+            raise Exception('BERTlike model: unknown language.')
+
+        self.qembedder.config.output_hidden_states = True
+        self.aembedder.config.output_hidden_states = True
+
+        self.float_mode = float_mode
+        if float_mode == 'fp16':
+            self.qembedder.half()
+            self.aembedder.half()
+
+    def save_to(self, folder):
+        pass
+
+    def load_from(self, folder):
+        pass
+
+    def forward(self, batch):
+        device = next(self.qembedder.parameters()).device
+        return self.embed_batch(self.prepare_batch(batch, device))
+
+    def train(self):
+        self.qembedder.train()
+        self.aembedder.train()
+
+    def eval(self):
+        self.qembedder.eval()
+        self.aembedder.eval()
+
+class BERTLikeOptimizer: # (torch.optim.Optimizer):
+    # https://pytorch.org/docs/stable/_modules/torch/optim/sgd.html#SGD example
+    def __init__(self, model, num_train_optimization_steps, num_warmup_steps, learning_rate=5e-5, warmup=0.1):
+        self.qoptim = AdamW(model.qembedder.parameters(), lr=learning_rate, correct_bias=False)
+        self.qscheduler = WarmupLinearSchedule(self.qoptim, warmup_steps=num_warmup_steps, \
+                                        t_total=num_train_optimization_steps)
+
+        self.aoptim = AdamW(model.aembedder.parameters(), lr=learning_rate, correct_bias=False)
+        self.ascheduler = WarmupLinearSchedule(self.aoptim, warmup_steps=num_warmup_steps, \
+                                        t_total=num_train_optimization_steps)
+
+     #def __setstate__(self, state):
+     # super().__setstate__(state)
+
+    def step(self, closure=None):
+        assert(closure is None)
+
+        self.qscheduler.step()
+        self.ascheduler.step()
+        self.qoptim.step()
+        self.aoptim.step()
+
+    def zero_grad():
+        self.qoptim.zero_grad()
+        self.aoptim.zero_grad()
