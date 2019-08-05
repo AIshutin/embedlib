@@ -82,7 +82,8 @@ def get_model_optimizer(model):
 
 
 @ex.automain
-def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
+def train(_log, epochs, batch_size, learning_rate, w
+        mean_train_score = total_train_score / batch_numarmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     writer = SummaryWriter()

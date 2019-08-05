@@ -12,12 +12,12 @@ def remove_urls (vTEXT):
     vTEXT = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[link]', vTEXT, flags=re.MULTILINE)
     return vTEXT
 
-def print_batch(batch, tokenizer):
+def print_batch(batch):
     quests, answs = batch.quests, batch.answs
 
     for i in range(len(quests)):
-        print(i, tokenizer.decode(quests[i]))
-        print(">>> ", tokenizer.decode(answs[i]))
+        print(i, quests[i])
+        print(">>> ", answs[i])
     print()
 
 def load_model(checkpoint_dir):
