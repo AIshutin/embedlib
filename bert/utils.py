@@ -3,6 +3,8 @@ import os
 import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
+import json
+import models
 
 def remove_urls (vTEXT):
     # r'http\S+'
@@ -19,18 +21,12 @@ def print_batch(batch, tokenizer):
     print()
 
 def load_model(checkpoint_dir):
-    print(checkpoint_dir)
-    qembedder = BertModel.from_pretrained(checkpoint_dir + 'qembedder/')
-    aembedder = BertModel.from_pretrained(checkpoint_dir + 'aembedder/')
-    tokenizer = BertTokenizer.from_pretrained(checkpoint_dir)
-    return (qembedder, aembedder), tokenizer
-
-def save_model(model, tokenizer, checkpoint_dir):
-    os.system(f'mkdir "{checkpoint_dir}"')
-    qname = checkpoint_dir + 'qembedder/'
-    aname = checkpoint_dir + 'aembedder/'
-    os.system(f'mkdir "{qname}"')
-    os.system(f'mkdir "{aname}"')
-    model[0].save_pretrained(qname)
-    model[1].save_pretrained(aname)
-    tokenizer.save_pretrained(checkpoint_dir)
+    if checkpoint_dir[-1] != '/':
+        checkpoint_dir = checkpoint_dir + '/'
+    print(f"loading model from {checkpoint_dir}")
+    config = json.load(open(f'{checkpoint_dir}model_config.json'))
+    name = config['name']
+    config.pop('name')
+    config['cache_dir'] = checkpoint_dir
+    print(f"CONFIG {config}")
+    return getattr(models, name)(**config)

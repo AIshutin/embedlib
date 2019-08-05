@@ -1,6 +1,8 @@
 import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
+import os
+import json
 
 class BERTLike(torch.nn.Module):
     max_seq_len = 512
@@ -42,21 +44,23 @@ class BERTLike(torch.nn.Module):
 
 
     def __init__(self, lang, bert_type, float_mode='fp32', cache_dir=None):
-        if cache_dir is None:
-            cache_dir = f'../{bert_type}'
         super().__init__()
+        self.lang = lang
+        self.bert_type = bert_type
         if lang == 'en':
-            cache_dir = '../pretrained-' + bert_type + '/'
-            self.tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
-            self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-            self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+            if cache_dir is None:
+                cache_dir = '../pretrained-' + bert_type + '/'
+                self.tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
+                self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+                self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+            else:
+                self.tokenizer = BertTokenizer.from_pretrained(cache_dir)
+                self.qembedder = BertModel.from_pretrained(f'{cache_dir}qembedder/')
+                self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
         elif lang == 'ru':
             pass
         else:
             raise Exception('BERTlike model: unknown language.')
-
-        self.qembedder.config.output_hidden_states = True
-        self.aembedder.config.output_hidden_states = True
 
         self.float_mode = float_mode
         if float_mode == 'fp16':
@@ -64,10 +68,20 @@ class BERTLike(torch.nn.Module):
             self.aembedder.half()
 
     def save_to(self, folder):
-        pass
-
-    def load_from(self, folder):
-        pass
+        if folder[-1] != '/':
+            folder = folder + '/'
+        os.system(f'mkdir "{folder}"')
+        qname = f'{folder}qembedder/'
+        aname = f'{folder}aembedder/'
+        os.system(f'mkdir "{qname}"')
+        os.system(f'mkdir "{aname}"')
+        self.qembedder.save_pretrained(qname)
+        self.aembedder.save_pretrained(aname)
+        self.tokenizer.save_pretrained(folder)
+        config = {'float_mode': self.float_mode, 'name': self.__name__, \
+                 'lang': self.lang, 'bert_type': self.bert_type}
+        with open(f'{folder}model_config.json', 'w') as file:
+            json.dump(config, file)
 
     def forward(self, batch):
         device = next(self.qembedder.parameters()).device

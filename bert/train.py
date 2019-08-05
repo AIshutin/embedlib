@@ -12,7 +12,7 @@ import losses
 import metrics
 from metrics import get_mean_on_data
 
-from utils import load_model, save_model
+from utils import load_model
 
 import datasets
 from datasets import collate_wrapper
@@ -44,7 +44,7 @@ def config():
     batch_size = 16  # 16, 32 are recommended in the paper
 
     dataset_names = ['en-twitt-corpus']
-    max_dataset_size = int(1e5)
+    max_dataset_size = int(100)
 
     model_name = 'BERTLike'
     model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp32'}
@@ -108,7 +108,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     _log.info("***** Running training *****")
     _log.info("  Num steps = %d", num_train_optimization_steps)
     _log.info(f"Score before fine-tuningfloat_mode: {val_score_before:9.4f}")
-    _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
+    _log.info(f"Loss before fine-tuning: # IDEA: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
     writer.add_scalar("val/loss", val_loss_before, 0)
@@ -143,8 +143,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
         # ToDo do something with score
         val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
-                                        (qembedder, aembedder), \
-                                        float_mode)
+                                                        model)
         writer.add_scalar("val/score", val_score, epoch + 1)
         writer.add_scalar("val/loss", val_loss, epoch + 1)
         writer.add_scalar("train/total_loss", total_loss, epoch)
@@ -153,3 +152,6 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         _log.info(f"score:{val_score:9.4f} | loss:{total_loss:9.4f}")
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
         model.save_to(checkpoint_name)
+
+    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
+                                                        test, load_model(checkpoint_name))
