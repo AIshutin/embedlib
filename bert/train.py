@@ -18,6 +18,7 @@ import datasets
 from datasets import collate_wrapper
 
 import models
+import optimizers
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -77,7 +78,7 @@ def get_model(model_name, model_config):
 
 @ex.capture
 def get_model_optimizer(model):
-    return getattr(models, f'{model.__name__}Optimizer')
+    return getattr(optimizers, f'{model.__name__}Optimizer')
 
 
 @ex.automain
