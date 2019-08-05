@@ -43,11 +43,11 @@ def config():
     criterion_func = 'hinge_loss'
     batch_size = 32  # 16, 32 are recommended in the paper
 
-    dataset_names = ['en-twitt-corpus']
-    max_dataset_size = int(100)
-
     model_name = 'BERTLike'
-    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp16'}
+    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'ru', 'float_mode': 'fp16'}
+
+    dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
+    max_dataset_size = int(1e3)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \

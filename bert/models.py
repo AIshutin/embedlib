@@ -42,6 +42,10 @@ class BERTLike(torch.nn.Module):
 
         return (qembeddings, aembeddings)
 
+    def load_from(self, cache_dir):
+        self.tokenizer = BertTokenizer.from_pretrained(cache_dir)
+        self.qembedder = BertModel.from_pretrained(f'{cache_dir}qembedder/')
+        self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
 
     def __init__(self, lang, bert_type, float_mode='fp32', cache_dir=None):
         super().__init__()
@@ -49,16 +53,16 @@ class BERTLike(torch.nn.Module):
         self.bert_type = bert_type
         if lang == 'en':
             if cache_dir is None:
-                cache_dir = '../pretrained-' + bert_type + '/'
+                cache_dir = f'../pretrained-{bert_type}/'
                 self.tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
                 self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
                 self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
             else:
-                self.tokenizer = BertTokenizer.from_pretrained(cache_dir)
-                self.qembedder = BertModel.from_pretrained(f'{cache_dir}qembedder/')
-                self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
+                self.load_from(cache_dir)
         elif lang == 'ru':
-            pass
+            if cache_dir is None:
+                cache_dir = f'../ru{bert_type}/'
+            self.load_from(cache_dir)
         else:
             raise Exception('BERTlike model: unknown language.')
 
