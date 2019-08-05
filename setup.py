@@ -1,9 +1,9 @@
 import setuptools
 
 setuptools.setup(
-    name="bert",
+    name="embedlib",
     version="0.1",
-    description="CLI for any Python program",
-    packages=['bert'],
-    install_requires=['pytorch_pretrained_bert',],
+    description="PyTorch drop-in embedders and tokenizers",
+    packages=['embedlib'],
+    install_requires=['pytorch-transformers',],
 )
