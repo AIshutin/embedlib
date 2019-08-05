@@ -13,8 +13,16 @@ class BERTLike(torch.nn.Module):
 
         assert(len(quests) == len(answs))
 
-        quests = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in quests]
-        answs = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in answs]
+        quests = [self.tokenizer.encode(el) for el in quests]
+        max_qlen = max(len(el) for el in quests)
+        quests = [el + [self.pad_token_id] * (max_qlen - len(el)) for el in quests]
+
+        answs = [self.tokenizer.encode(el) for el in answs]
+        max_alen = max(len(el) for el in answs)
+        answs = [el + [self.pad_token_id] * (max_alen - len(el)) for el in answs]
+
+        quests = torch.tensor(quests, device=device)
+        answs = torch.tensor(answs, device=device)
 
         return (quests, answs)
 
@@ -29,11 +37,19 @@ class BERTLike(torch.nn.Module):
     def embed_batch(self, batch):
         quests, answs = batch
 
-        tmp_quest = [self.get_embedding(self.qembedder(quests[i])[0]) for i in range(len(quests))]
-        tmp_answ = [self.get_embedding(self.aembedder(answs[i])[0]) for i in range(len(answs))]
+        #print(type(quests[0]), quests[0])
+        qlays = self.qembedder(quests)[0]
+        alays = self.aembedder(answs)[0]
 
-        qembeddings = torch.cat(tmp_quest)
-        aembeddings = torch.cat(tmp_answ)
+        '''print(type(qlays))
+        print(len(qlays))
+        print(type(qlays[0]), type(qlays[1]))
+        print(qlays[0].shape, qlays[1].shape)
+        print(qlays[0])
+        exit(0)'''
+
+        qembeddings = self.get_embedding(qlays)
+        aembeddings = self.get_embedding(alays)
 
         assert(qembeddings.shape == aembeddings.shape)
 
@@ -70,6 +86,8 @@ class BERTLike(torch.nn.Module):
         if float_mode == 'fp16':
             self.qembedder.half()
             self.aembedder.half()
+
+        self.pad_token_id = self.tokenizer.encode('[PAD]')[0]
 
     def save_to(self, folder):
         if folder[-1] != '/':
