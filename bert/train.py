@@ -41,13 +41,13 @@ def config():
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
     criterion_func = 'hinge_loss'
-    batch_size = 32  # 16, 32 are recommended in the paper
+    batch_size = 16  # 16, 32 are recommended in the paper
 
     model_name = 'BERTLike'
-    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'ru', 'float_mode': 'fp16'}
+    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp16'}
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e3)
+    max_dataset_size = int(1e5)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -82,8 +82,7 @@ def get_model_optimizer(model):
 
 
 @ex.automain
-def train(_log, epochs, batch_size, learning_rate, w
-        mean_train_score = total_train_score / batch_numarmup, checkpoint_dir, metric_func, \
+def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     writer = SummaryWriter()
@@ -123,7 +122,7 @@ def train(_log, epochs, batch_size, learning_rate, w
         batch_num = 0
 
         for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
-            optimizer.step()
+            optimizer.zero_grad()
 
             embeddings = model(batch)
             loss = criterion(*embeddings)

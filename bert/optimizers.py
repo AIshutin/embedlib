@@ -22,6 +22,6 @@ class BERTLikeOptimizer: # (torch.optim.Optimizer):
         self.qoptim.step()
         self.aoptim.step()
 
-    def zero_grad():
+    def zero_grad(self):
         self.qoptim.zero_grad()
         self.aoptim.zero_grad()
