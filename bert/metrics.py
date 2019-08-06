@@ -1,6 +1,5 @@
 import numpy as np
 from losses import cosine_similarity_table
-from utils import prepare_batch, embed_batch
 import torch
 from random import *
 
@@ -39,18 +38,15 @@ def calc_random_mrr(batch_size):
         mrrs += 1 / i
     return mrrs / batch_size
 
-def get_mean_on_data(metric, data, model, float_mode):
+def get_mean_on_data(metric, data, model):
     if type(metric) != type(list()) and type(metric) != type(tuple()):
         metric = [metric]
     results = [None] * len(metric)
-    qembedder, aembedder = model
-    device = next(qembedder.parameters()).device
-    qembedder.eval()
-    aembedder.eval()
+    model.eval()
     testbatch_cnt = 0
     with torch.no_grad():
         for batch in data:
-            embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
+            embeddings = model(batch)
             for i in range(len(metric)):
                 curr = metric[i](*embeddings)
                 if results[i] is None:

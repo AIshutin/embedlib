@@ -32,9 +32,9 @@ class UbuntuCorpus(Dataset):
                     assert(len(authors) <= 2)
                 '''
                 Answer replic is a replic without ?
-                 Question replic is a replic with ? followed by answer replic
+                Question replic is a replic with ? followed by answer replic
 
-                 Both must be longer than thr (after link replacemenets)
+                Both must be longer than thr (after link replacemenets)
 
                 And due to BERT restrictions both in tokenized form must be shorter than max_seq_len
                 '''
@@ -87,8 +87,9 @@ class TokenizedQABatch:
 def collate_wrapper(batch):
     return TokenizedQABatch(batch)
 
+
 class TwittCorpus(Dataset):
-    def __init__(self, tokenizer, max_dataset_size=100, path='../corp.txt', max_seq_len=512):
+    def __init__(self, tokenizer, max_dataset_size=100, path='../rucorp.txt', max_seq_len=512):
         '''
         Gets Path to TXT file in format
         [CLS] Qestion [SEP] \n
@@ -107,7 +108,7 @@ class TwittCorpus(Dataset):
             qtok = tokenizer.encode(el[0])
             atok = tokenizer.encode(el[1])
             if max(len(qtok), len(atok)) <= max_seq_len:
-                good.append([qtok, atok])
+                good.append([el[0], el[1]])
                 if len(good) == max_dataset_size:
                     break
         self.qa_s = good
@@ -117,3 +118,22 @@ class TwittCorpus(Dataset):
 
     def __getitem__(self, idx):
         return (self.qa_s[idx][0], self.qa_s[idx][1])
+
+
+corpus_handler = {'en-ubuntu-corpus': (UbuntuCorpus, '../dialogs'), \
+                'en-twitt-corpus': (TwittCorpus, '../corp.txt'), \
+                'ru-opendialog-corpus': (TwittCorpus, '../rucorp.txt')}
+
+class CorpusData(Dataset):
+    def __init__(self, names, tokenizer, max_dataset_size=100, max_seq_len=512):
+        super(CorpusData, self).__init__()
+        datasets = [corpus_handler[el][0](tokenizer, max_dataset_size, corpus_handler[el][1], max_seq_len) \
+                    for el in names]
+        self.data = torch.utils.data.ConcatDataset(datasets)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+        
