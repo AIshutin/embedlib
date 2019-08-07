@@ -41,13 +41,13 @@ def config():
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
     criterion_func = 'hinge_loss'
-    batch_size = 16  # 16, 32 are recommended in the paper
+    batch_size = 32  # 16, 32 are recommended in the paper
 
     model_name = 'BERTLike'
     model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp16'}
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e5)
+    max_dataset_size = int(1e2)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -103,7 +103,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
                                             warmup=warmup,\
                                             learning_rate=learning_rate)
 
-    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
+    """val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
                                                                 test, model)
     _log.info("***** Running training *****")
     _log.info(f"  Num steps = {num_train_optimization_steps}")
@@ -111,7 +111,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
-    writer.add_scalar("val/loss", val_loss_before, 0)
+    writer.add_scalar("val/loss", val_loss_before, 0)"""
 
     step = 0
     for epoch in range(epochs):
@@ -135,9 +135,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             batch_num += 1
 
             total_loss += loss.item()
-            loss.backward()
-
-            optimizer.step()
+            optimizer.step(loss)
 
         mean_train_score = total_train_score / batch_num
 
