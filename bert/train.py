@@ -44,7 +44,7 @@ def config():
     batch_size = 16  # 16, 32 are recommended in the paper
 
     model_name = 'BERTLike'
-    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp16'}
+    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp32'}
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
     max_dataset_size = int(1e5)
