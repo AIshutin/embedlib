@@ -9,8 +9,16 @@ class BERTLike(torch.nn.Module):
     __name__ = 'BERTLike'
 
     def prepare_halfbatch(self, batch, device):
-        encoded = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in batch]
-        return encoded
+        mx_len = 0
+        encoded = [self.tokenizer.encode(el) for el in batch]
+        for el in encoded:
+            mx_len = max(mx_len, len(el))
+
+        for i in range(len(encoded)):
+            encoded[i] += self.tokenizer.encode('[PAD]') * (mx_len - len(encoded[i])) # [PAD] token
+
+        result = torch.tensor(encoded, device=device)
+        return result
 
     def get_embedding(self, embeddings):
         '''
@@ -26,8 +34,7 @@ class BERTLike(torch.nn.Module):
         else:
             embedder = self.aembedder
 
-        tmp_batch = [self.get_embedding(embedder(batch[i])[0]) for i in range(len(batch))]
-        embeddings = torch.cat(tmp_batch)
+        embeddings = self.get_embedding(embedder(batch)[0])
 
         if self.float_mode == 'fp16':
             return embeddings.half()
