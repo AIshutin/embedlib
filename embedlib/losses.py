@@ -27,6 +27,8 @@ def hinge_loss(X, Y, margin=0.1):
     similarities = cosine_similarity_table(X, Y)
 
     identity = torch.eye(batch_size, device=X.device)
+    if similarities.dtype == torch.half or similarities.dtype == torch.float16:
+        identity = identity.half()
     non_diagonal = torch.ones_like(similarities) - identity
 
     targets = identity - non_diagonal
@@ -53,7 +55,10 @@ def triplet_loss(X, Y, margin=0.1, batch_hard=True):
     similarities = cosine_similarity_table(X, Y)
 
     if batch_hard:
-        right_conf = (torch.eye(batch_size, device=X.device) * similarities).sum(-1)
+        identity = torch.eye(batch_size, device=X.device)
+        if similarities.dtype == torch.half or similarities.dtype == torch.float16:
+            identity = identity.half()
+        right_conf = (identity * similarities).sum(-1)
         #print(right_conf.shape)
         max_confq, _ = similarities.max(1)
         max_confa, _ = similarities.max(0)

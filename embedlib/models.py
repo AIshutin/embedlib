@@ -13,12 +13,14 @@ class BERTLike(torch.nn.Module):
         encoded = [self.tokenizer.encode(el) for el in batch]
         for el in encoded:
             mx_len = max(mx_len, len(el))
-
+        attention_mask = [[1] * len(encoded[i]) + [0] * (mx_len - len(encoded[i])) \
+                                                    for i in range(len(encoded))]
         for i in range(len(encoded)):
             encoded[i] += self.tokenizer.encode('[PAD]') * (mx_len - len(encoded[i])) # [PAD] token
 
-        result = torch.tensor(encoded, device=device)
-        return result
+        encoded = torch.tensor(encoded, device=device)
+        attention_mask = torch.tensor(attention_mask, device=device)
+        return (encoded, attention_mask)
 
     def get_embedding(self, embeddings):
         '''
@@ -34,7 +36,7 @@ class BERTLike(torch.nn.Module):
         else:
             embedder = self.aembedder
 
-        embeddings = self.get_embedding(embedder(batch)[0])
+        embeddings = self.get_embedding(embedder(batch[0], attention_mask=batch[1])[0])
 
         if self.float_mode == 'fp16':
             return embeddings.half()
