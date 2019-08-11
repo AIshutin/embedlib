@@ -8,15 +8,9 @@ class BERTLike(torch.nn.Module):
     max_seq_len = 512
     __name__ = 'BERTLike'
 
-    def prepare_batch(self, batch, device):
-        quests, answs = batch.quests, batch.answs
-
-        assert(len(quests) == len(answs))
-
-        quests = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in quests]
-        answs = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in answs]
-
-        return (quests, answs)
+    def prepare_halfbatch(self, batch, device):
+        encoded = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in batch]
+        return encoded
 
     def get_embedding(self, embeddings):
         '''
@@ -26,21 +20,19 @@ class BERTLike(torch.nn.Module):
         '''
         return torch.sum(embeddings, dim=1)
 
-    def embed_batch(self, batch):
-        quests, answs = batch
+    def embed_halfbatch(self, batch, is_quest=True):
+        if is_quest:
+            embedder = self.qembedder
+        else:
+            embedder = self.aembedder
 
-        tmp_quest = [self.get_embedding(self.qembedder(quests[i])[0]) for i in range(len(quests))]
-        tmp_answ = [self.get_embedding(self.aembedder(answs[i])[0]) for i in range(len(answs))]
-
-        qembeddings = torch.cat(tmp_quest)
-        aembeddings = torch.cat(tmp_answ)
-
-        assert(qembeddings.shape == aembeddings.shape)
+        tmp_batch = [self.get_embedding(embedder(batch[i])[0]) for i in range(len(batch))]
+        embeddings = torch.cat(tmp_batch)
 
         if self.float_mode == 'fp16':
-            return (qembeddings.half(), aembeddings.half())
-
-        return (qembeddings, aembeddings)
+            return embeddings.half()
+        else:
+            return embeddings
 
     def load_from(self, cache_dir):
         self.tokenizer = BertTokenizer.from_pretrained(cache_dir)
@@ -87,9 +79,19 @@ class BERTLike(torch.nn.Module):
         with open(f'{folder}model_config.json', 'w') as file:
             json.dump(config, file)
 
+    def qembedd(self, quests):
+        device = next(self.qembedder.parameters()).device
+        return self.embed_halfbatch(self.prepare_halfbatch(quests, device), is_quest=True)
+
+    def aembedd(self, answs):
+        device = next(self.qembedder.parameters()).device
+        return self.embed_halfbatch(self.prepare_halfbatch(answs, device), is_quest=False)
+
     def forward(self, batch):
         device = next(self.qembedder.parameters()).device
-        return self.embed_batch(self.prepare_batch(batch, device))
+        quests, answs = batch.quests, batch.answs
+        assert(len(quests) == len(answs))
+        return (self.qembedd(quests), self.aembedd(answs))
 
     def train(self):
         self.qembedder.train()
