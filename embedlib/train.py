@@ -4,21 +4,21 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
-from pytorch_transformers import BertModel, BertConfig
-from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
-
 import numpy as np
 import pickle
 import tqdm
 
+import losses
 import metrics
 from metrics import get_mean_on_data
-import losses
-from utils import embed_batch, prepare_batch
-from utils import load_model, save_model
-from datasets import collate_wrapper
+
+from utils import load_model
+
 import datasets
+from datasets import collate_wrapper
+
+import models
+import optimizers
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -34,29 +34,25 @@ def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 4
+    epochs = 3
     warmup = 0.1
 
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
-    criterion_func = 'triplet_loss'
+    criterion_func = 'hinge_loss'
     batch_size = 16  # 16, 32 are recommended in the paper
 
-    float_mode = 'fp32'
+    model_name = 'BERTLike'
+    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp32'}
 
-    dataset_name = 'TwittCorpus'
+    dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
     max_dataset_size = int(1e5)
-
-    # BERT config
-    max_seq_len = 512
-    bert_type = 'bert-base-uncased'
-    cache_dir = '../pretrained-' + bert_type + '/'
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
-            dataset_name):
-    corpus = getattr(datasets, dataset_name)(tokenizer, max_dataset_size)
+            dataset_names):
+    corpus = datasets.CorpusData(dataset_names, tokenizer, max_dataset_size)
     _log.info(f"Corpus size: {len(corpus)}")
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
@@ -75,31 +71,25 @@ def get_criterion(criterion_func):
     return criterion
 
 @ex.capture
-def get_model(bert_type, cache_dir, float_mode):
-    tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
-    qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-    qembedder.config.output_hidden_states = True
-    aembedder.config.output_hidden_states = True
-    if float_mode == 'fp16':
-        qembedder.half()
-        aembedder.half()
+def get_model(model_name, model_config):
+    model = getattr(models, model_name)(**model_config)
 
-    model = (qembedder, aembedder)
+    return model
 
-    return tokenizer, model
+@ex.capture
+def get_model_optimizer(model):
+    return getattr(optimizers, f'{model.__name__}Optimizer')
+
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
-        metric_baseline_func, criterion_func, float_mode, metric_name):
-
+        metric_baseline_func, criterion_func, metric_name):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     writer = SummaryWriter()
-    tokenizer, (qembedder, aembedder) = get_model()
-    qembedder.to(device)
-    aembedder.to(device)
+    model = get_model()
+    model.to(device)
 
-    train, test = get_data(_log, '.', tokenizer)
+    train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
     metric = get_metric()
     metric_baseline = get_metric(metric_baseline_func)
     criterion = get_criterion()
@@ -108,21 +98,16 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
     num_warmup_steps = int(warmup * num_train_optimization_steps)
 
-    qoptim = AdamW(qembedder.parameters(), lr=learning_rate, correct_bias=False)
-    qscheduler = WarmupLinearSchedule(qoptim, warmup_steps=num_warmup_steps, \
-                                    t_total=num_train_optimization_steps)
+    optimizer = get_model_optimizer(model)(model, num_train_optimization_steps=num_train_optimization_steps,\
+                                            num_warmup_steps=num_warmup_steps,\
+                                            warmup=warmup,\
+                                            learning_rate=learning_rate)
 
-    aoptim = AdamW(aembedder.parameters(), lr=learning_rate, correct_bias=False)
-    ascheduler = WarmupLinearSchedule(aoptim, warmup_steps=num_warmup_steps, \
-                                    t_total=num_train_optimization_steps)
-
-    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], test, \
-                                                            (qembedder, aembedder), \
-                                                            float_mode)
-
+    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
+                                                                test, model)
     _log.info("***** Running training *****")
-    _log.info("  Num steps = %d", num_train_optimization_steps)
-    _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
+    _log.info(f"  Num steps = {num_train_optimization_steps}")
+    _log.info(f"Score before fine-tuningfloat_mode: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
@@ -131,17 +116,15 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     step = 0
     for epoch in range(epochs):
         total_loss = 0
-        qembedder.train()
-        aembedder.train()
+        model.train()
         total_train_score = 0
         total_mrr = 0
         batch_num = 0
 
         for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
-            qoptim.zero_grad()
-            aoptim.zero_grad()
+            optimizer.zero_grad()
 
-            embeddings = embed_batch(prepare_batch(batch, device), qembedder, aembedder, float_mode)
+            embeddings = model(batch)
             loss = criterion(*embeddings)
             score = metric(*embeddings)
             total_train_score += score
@@ -154,17 +137,13 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             total_loss += loss.item()
             loss.backward()
 
-            qscheduler.step()
-            ascheduler.step()
-            qoptim.step()
-            aoptim.step()
+            optimizer.step()
 
         mean_train_score = total_train_score / batch_num
 
         # ToDo do something with score
         val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
-                                        (qembedder, aembedder), \
-                                        float_mode)
+                                                        model)
         writer.add_scalar("val/score", val_score, epoch + 1)
         writer.add_scalar("val/loss", val_loss, epoch + 1)
         writer.add_scalar("train/total_loss", total_loss, epoch)
@@ -172,4 +151,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
         _log.info(f"score:{val_score:9.4f} | loss:{total_loss:9.4f}")
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
-        save_model((qembedder, aembedder), tokenizer, checkpoint_name)
+        model.save_to(checkpoint_name)
+
+    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
+                                                        test, load_model(checkpoint_name).to(device))

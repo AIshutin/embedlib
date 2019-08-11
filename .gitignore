@@ -6,8 +6,8 @@ dialogs/
 reddit_data/
 output/
 pretrained-bert-base-uncased/
-bert/checkpoints/
-bert/runs/
+embedlib/checkpoints/
+embedlib/runs/
 *.tgz
 
 # Byte-compiled / optimized / DLL files

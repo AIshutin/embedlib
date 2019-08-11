@@ -17,10 +17,10 @@ class BERTLikeOptimizer: # (torch.optim.Optimizer):
     def step(self, closure=None):
         assert(closure is None)
 
-        self.qscheduler.step()
-        self.ascheduler.step()
         self.qoptim.step()
         self.aoptim.step()
+        self.qscheduler.step()
+        self.ascheduler.step()
 
     def zero_grad(self):
         self.qoptim.zero_grad()
