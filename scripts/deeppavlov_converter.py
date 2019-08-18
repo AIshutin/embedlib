@@ -21,7 +21,7 @@ import random
 import json
 
 download_link = sys.argv[1] if len(sys.argv) >= 2 else \
-"http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_capytorch_model.binsed_L-12_H-768_A-12_v1.tar.gz"
+"http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_cased_L-12_H-768_A-12_v1.tar.gz"
 save_dir = sys.argv[2] if len(sys.argv) >= 3 else \
 "../rubert-base/"
 
@@ -38,12 +38,12 @@ if 'qembedder' in os.listdir(save_dir):
     #exit(0)
 
 download_file = 'deeppavlov_model.tar.gz'
-download_dir = '/tmp/'
+download_dir = '/tmp/' # '/tmp/'
 if download_file not in os.listdir(download_dir):
     print('Beginning file download...')
-    download_dir = dowt_model.ckpt {bertd}bert_config.json {save_dir}pytorch_model.bin"
-os.system(f"pynload_dir + download_file
+    download_dir = f'{download_dir}{download_file}'
     os.system(f'wget -O {download_dir} {download_link}')
+    print('Compleated')
     # urllib.request.urlretrieve(download_link, download_dir)
 else:
     download_dir = download_dir + download_file

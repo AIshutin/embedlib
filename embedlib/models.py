@@ -1,11 +1,19 @@
 import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
+
+#import tensorflow as tf
+#import tensorflow_hub as hub
+
+import sentencepiece as spm
+
 import os
 import json
 
+import numpy
+
 class BERTLike(torch.nn.Module):
-    max_seq_len = 512
+    max_seq_len = 300
     __name__ = 'BERTLike'
 
     def prepare_halfbatch(self, batch, device):
@@ -109,3 +117,72 @@ class BERTLike(torch.nn.Module):
     def eval(self):
         self.qembedder.eval()
         self.aembedder.eval()
+
+class USEncoder(torch.nn.Module):
+    def __init__(self, float_mode='fp32', lang='en'):
+        self.embedder = hub.Module("https://tfhub.dev/google/universal-sentence-encoder-lite/2")
+        self.qembedder = torch.nn.Sequntial([torch.nn.Linear(300, 300), \
+                                            torch.nn.ReLU()])
+        self.aembedder = torch.nn.Sequntial([torch.nn.Linear(300, 300), \
+                                            torch.nn.ReLU()])
+        with tf.Session() as sess:
+            spm_path = sess.run(module(signature="spm_path"))
+
+        self.sp = spm.SentencePieceProcessor()
+        self.sp.Load(spm_path)
+        print("SentencePiece model loaded at {}.".format(spm_path))
+
+
+        self.input_placeholder = tf.sparse_placeholder(tf.int64, shape=[None, None])
+        self.embeddings = module(
+            inputs=dict(
+                values=self.input_placeholder.values,
+                indices=self.input_placeholder.indices,
+                dense_shape=self.input_placeholder.dense_shape))
+
+        # Reduce logging output.
+        tf.logging.set_verbosity(tf.logging.ERROR)
+
+    def process_to_IDs_in_sparse_format(self, sentences):
+        # An utility method that processes sentences with the sentence piece processor
+        # 'sp' and returns the results in tf.SparseTensor-similar format:
+        # (values, indices, dense_shape)
+        ids = [self.sp.EncodeAsIds(x) for x in sentences]
+        max_len = max(len(x) for x in ids)
+        dense_shape=(len(ids), max_len)
+        values=[item for sublist in ids for item in sublist]
+        indices=[[row,col] for row in range(len(ids)) for col in range(len(ids[row]))]
+        return (values, indices, dense_shape)
+
+    def tf_encode(self, text):
+        values, indices, dense_shape = self.process_to_IDs_in_sparse_format(text)
+
+        with tf.Session() as session:
+          session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+          message_embeddings = session.run(
+              self.encodings,
+              feed_dict={self.input_placeholder.values: values,
+                        self.input_placeholder.indices: indices,
+                        self.input_placeholder.dense_shape: dense_shape})
+
+          '''for i, message_embedding in enumerate(np.array(message_embeddings).tolist()):
+            print("Message: {}".format(messages[i]))
+            print("Embedding size: {}".format(len(message_embedding)))
+            message_embedding_snippet = ", ".join(
+                (str(x) for x in message_embedding[:3]))
+            print("Embedding: [{}, ...]\n".format(message_embedding_snippet))'''
+
+        return message_embeddings
+
+    def forward(self, batch):
+        device = next(self.qembedder.parameters()).device
+        quests, answs = batch.quests, batch.answs
+        qembedd = self.tf_encode(quests)
+        aembedd = self.tf_encode(answs)
+
+        print('qembedd', qembedd.shape)
+
+        qembeddings = self.qembedder(qembedd)
+        aembeddings = self.aembedder(aembedd)
+
+        return (torch.tensor(qembeddings, device=device), torch.tensor(aembeddings, device=device))

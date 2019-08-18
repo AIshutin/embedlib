@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
+from GPUtil import showUtilization as gpu_usage
+from utils import mem_report
 
 import numpy as np
 import pickle
@@ -25,6 +27,7 @@ from sacred.observers import MongoObserver, TelegramObserver
 
 import logging
 import os
+import time
 
 ex = Experiment()
 # ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
@@ -41,13 +44,20 @@ def config():
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
     criterion_func = 'hinge_loss'
-    batch_size = 16  # 16, 32 are recommended in the paper
+    batch_size = 10  # 16, 32 are recommended in the paper
 
     model_name = 'BERTLike'
-    model_config = {'bert_type': 'bert-base-uncased', 'lang': 'en', 'float_mode': 'fp32'}
+    model_config = None
+    if model_name is 'BERTLike':
+        model_config = {'bert_type': 'bert-base-uncased',
+                    'lang': 'en', 'float_mode': 'fp16'}
+    elif model_name is 'USEncoder':
+        model_config = {'float_mode': 'fp32', 'lang': 'en'}
+    else:
+        raise Exception('model is not defined')
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e5)
+    max_dataset_size = int(1e2)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -58,7 +68,7 @@ def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, ma
     train_size = len(corpus) - test_size
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
     return DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper), \
-           DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper)
+           DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper) # batch_size
 
 @ex.capture
 def get_metric(metric_func):
@@ -84,10 +94,17 @@ def get_model_optimizer(model):
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name):
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
+    'cuda:0' if torch.cuda.is_available() else 'cpu'
+    # 'cuda:0' if torch.cuda.is_available() else 'cpu')
+    # 'cpu'
+    mem_report()
     writer = SummaryWriter()
     model = get_model()
     model.to(device)
+    mem_report()
+    print('Sleep')
+    time.sleep(100)
 
     train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
     metric = get_metric()
@@ -107,7 +124,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
                                                                 test, model)
     _log.info("***** Running training *****")
     _log.info(f"  Num steps = {num_train_optimization_steps}")
-    _log.info(f"Score before fine-tuningfloat_mode: {val_score_before:9.4f}")
+    _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
@@ -120,7 +137,6 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         total_train_score = 0
         total_mrr = 0
         batch_num = 0
-
         for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
             optimizer.zero_grad()
 

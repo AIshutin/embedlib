@@ -76,7 +76,7 @@ class TokenizedQABatch:
         for el in data:
             self.quests.append(el[0])
             self.answs.append(el[1])
-        assert(len(data[0]) == len(data[1]))
+        #assert(len(data[0]) == len(data[1]))
 
     def pin_memory(self):
         for i in range(len(quests)):
@@ -136,4 +136,3 @@ class CorpusData(Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx]
-        
