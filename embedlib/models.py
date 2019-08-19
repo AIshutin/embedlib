@@ -13,7 +13,7 @@ import json
 import numpy
 
 class BERTLike(torch.nn.Module):
-    max_seq_len = 300
+    max_seq_len = 512
     __name__ = 'BERTLike'
 
     def prepare_halfbatch(self, batch, device):
@@ -53,19 +53,25 @@ class BERTLike(torch.nn.Module):
 
     def load_from(self, cache_dir):
         self.tokenizer = BertTokenizer.from_pretrained(cache_dir)
-        self.qembedder = BertModel.from_pretrained(f'{cache_dir}qembedder/')
-        self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
+        if 'qembedder' in self.models:
+            self.qembedder = BertModel.from_pretrained(f'{cache_dir}qembedder/')
+        if 'aembedder' in self.models:
+            self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
 
-    def __init__(self, lang, bert_type, float_mode='fp32', cache_dir=None):
+    def __init__(self, lang, bert_type, float_mode='fp32', \
+            models=['aembedder', 'qembedder'], cache_dir=None):
         super().__init__()
         self.lang = lang
         self.bert_type = bert_type
+        self.models = models
         if lang == 'en':
             if cache_dir is None:
                 cache_dir = f'../pretrained-{bert_type}/'
                 self.tokenizer = BertTokenizer.from_pretrained(bert_type, cache_dir=cache_dir)
-                self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
-                self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+                if 'qembedder' in models:
+                    self.qembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
+                if 'aembedder' in models:
+                    self.aembedder = BertModel.from_pretrained(bert_type, cache_dir=cache_dir)
             else:
                 self.load_from(cache_dir)
         elif lang == 'ru':
@@ -77,8 +83,16 @@ class BERTLike(torch.nn.Module):
 
         self.float_mode = float_mode
         if float_mode == 'fp16':
-            self.qembedder.half()
-            self.aembedder.half()
+            if 'qembedder' in models:
+                self.qembedder.half()
+            if 'aembedder' in models:
+                self.aembedder.half()
+            #for el in self.qembedder.parameters():
+            #    el.half()
+            #    #print(list(el)[0].data.dtype)
+            #    assert(list(el)[0].data.dtype == torch.float16)
+            #for el in self.aembedder.parameters():
+            #    el.half()
 
     def save_to(self, folder):
         if folder[-1] != '/':
@@ -88,8 +102,10 @@ class BERTLike(torch.nn.Module):
         aname = f'{folder}aembedder/'
         os.system(f'mkdir "{qname}"')
         os.system(f'mkdir "{aname}"')
-        self.qembedder.save_pretrained(qname)
-        self.aembedder.save_pretrained(aname)
+        if 'qembedder' in self.models:
+            self.qembedder.save_pretrained(qname)
+        if 'aembedder' in self.models:
+            self.aembedder.save_pretrained(aname)
         self.tokenizer.save_pretrained(folder)
         config = {'float_mode': self.float_mode, 'name': self.__name__, \
                  'lang': self.lang, 'bert_type': self.bert_type}
@@ -110,13 +126,23 @@ class BERTLike(torch.nn.Module):
         assert(len(quests) == len(answs))
         return (self.qembedd(quests), self.aembedd(answs))
 
+    def has_qembedder(self):
+        return 'qembedder' in self.models
+
+    def has_aembedder(self):
+        return 'aembedder' in self.models
+
     def train(self):
-        self.qembedder.train()
-        self.aembedder.train()
+        if self.has_qembedder():
+            self.qembedder.train()
+        if self.has_aembedder():
+            self.aembedder.train()
 
     def eval(self):
-        self.qembedder.eval()
-        self.aembedder.eval()
+        if self.has_qembedder():
+            self.qembedder.eval()
+        if self.has_aembedder():
+            self.aembedder.eval()
 
 class USEncoder(torch.nn.Module):
     def __init__(self, float_mode='fp32', lang='en'):

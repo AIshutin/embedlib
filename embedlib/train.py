@@ -28,6 +28,7 @@ from sacred.observers import MongoObserver, TelegramObserver
 import logging
 import os
 import time
+import gc
 
 ex = Experiment()
 # ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
@@ -68,7 +69,7 @@ def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, ma
     train_size = len(corpus) - test_size
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
     return DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper), \
-           DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper) # batch_size
+           DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper)
 
 @ex.capture
 def get_metric(metric_func):
@@ -83,13 +84,11 @@ def get_criterion(criterion_func):
 @ex.capture
 def get_model(model_name, model_config):
     model = getattr(models, model_name)(**model_config)
-
     return model
 
 @ex.capture
 def get_model_optimizer(model):
     return getattr(optimizers, f'{model.__name__}Optimizer')
-
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
@@ -99,12 +98,16 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     # 'cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cpu'
     mem_report()
+    #print('Sleep0')
+    time.sleep(30)
     writer = SummaryWriter()
     model = get_model()
     model.to(device)
+    gc.collect()
     mem_report()
     print('Sleep')
     time.sleep(100)
+    exit(0)
 
     train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
     metric = get_metric()

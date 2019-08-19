@@ -74,6 +74,7 @@ def mem_report():
         print('-'*LEN)
         print('Total Tensors: %d \tUsed Memory Space: %.2f MBytes' % (total_numel, total_mem) )
         print('-'*LEN)
+        return total_mem
 
     LEN = 65
     print('='*LEN)
@@ -82,6 +83,8 @@ def mem_report():
     tensors = [obj for obj in objects if torch.is_tensor(obj)]
     cuda_tensors = [t for t in tensors if t.is_cuda]
     host_tensors = [t for t in tensors if not t.is_cuda]
-    _mem_report(cuda_tensors, 'GPU')
-    _mem_report(host_tensors, 'CPU')
+    res = 0
+    res += _mem_report(cuda_tensors, 'GPU')
+    res += _mem_report(host_tensors, 'CPU')
     print('='*LEN)
+    return res
