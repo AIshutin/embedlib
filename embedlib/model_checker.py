@@ -18,7 +18,7 @@ model = load_model(checkpoint).to(device)
 max_dataset_size = int(1e2)
 batch_size = 16
 
-full_dataset= CorpusData(['ru-opendialog-corpus'], model.tokenizer, max_dataset_size + 100)
+full_dataset= CorpusData(['en-twitt-corpus'], model.tokenizer, max_dataset_size + 100) # 'ru-opendialog-corpus'
 print(f"full: {len(full_dataset)}")
 data = Subset(full_dataset, range(max_dataset_size, max_dataset_size + 100))
 print(f"subset: {len(data)}")

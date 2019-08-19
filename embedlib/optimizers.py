@@ -1,4 +1,5 @@
 from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+from torch.optim import Adam
 
 class BERTLikeOptimizer: # (torch.optim.Optimizer):
     # https://pytorch.org/docs/stable/_modules/torch/optim/sgd.html#SGD example
@@ -21,6 +22,23 @@ class BERTLikeOptimizer: # (torch.optim.Optimizer):
         self.aoptim.step()
         self.qscheduler.step()
         self.ascheduler.step()
+
+    def zero_grad(self):
+        self.qoptim.zero_grad()
+        self.aoptim.zero_grad()
+
+class USEncoderOptimizer:
+    def __init__(self, model, learning_rate=1e-4, **kwarg):
+        self.qoptim = Adam(model.qembedder.parameters(),\
+                                        lr=learning_rate)
+        self.aoptim = Adam(model.aembedder.parameters(),\
+                                        lr=learning_rate)
+
+    def step(self, closure=None):
+        assert(closure is None)
+
+        self.qoptim.step()
+        self.aoptim.step()
 
     def zero_grad(self):
         self.qoptim.zero_grad()
