@@ -2,33 +2,33 @@ import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
 
-#import tensorflow as tf
-#import tensorflow_hub as hub
-
-import sentencepiece as spm
-
 import os
 import json
 
 import numpy
+import gc
 
 class BERTLike(torch.nn.Module):
     max_seq_len = 512
     __name__ = 'BERTLike'
 
     def prepare_halfbatch(self, batch, device):
-        mx_len = 0
-        encoded = [self.tokenizer.encode(el) for el in batch]
-        for el in encoded:
-            mx_len = max(mx_len, len(el))
-        attention_mask = [[1] * len(encoded[i]) + [0] * (mx_len - len(encoded[i])) \
-                                                    for i in range(len(encoded))]
-        for i in range(len(encoded)):
-            encoded[i] += self.tokenizer.encode('[PAD]') * (mx_len - len(encoded[i])) # [PAD] token
+        if self.batch_mode:
+            mx_len = 0
+            encoded = [self.tokenizer.encode(el) for el in batch]
+            for el in encoded:
+                mx_len = max(mx_len, len(el))
+            attention_mask = [[1] * len(encoded[i]) + [0] * (mx_len - len(encoded[i])) \
+                                                        for i in range(len(encoded))]
+            for i in range(len(encoded)):
+                encoded[i] += self.tokenizer.encode('[PAD]') * (mx_len - len(encoded[i])) # [PAD] token
 
-        encoded = torch.tensor(encoded, device=device)
-        attention_mask = torch.tensor(attention_mask, device=device)
-        return (encoded, attention_mask)
+            encoded = torch.tensor(encoded, device=device)
+            attention_mask = torch.tensor(attention_mask, device=device)
+            return (encoded, attention_mask)
+        else:
+            encoded = [torch.tensor([self.tokenizer.encode(el)], device=device) for el in batch]
+            return encoded
 
     def get_embedding(self, embeddings):
         '''
@@ -44,7 +44,11 @@ class BERTLike(torch.nn.Module):
         else:
             embedder = self.aembedder
 
-        embeddings = self.get_embedding(embedder(batch[0], attention_mask=batch[1])[0])
+        if self.batch_mode:
+            embeddings = self.get_embedding(embedder(batch[0], attention_mask=batch[1])[0])
+        else:
+            tmp_embeds = [self.get_embedding(embedder(el)[0]) for el in batch]
+            embeddings = torch.cat(tmp_embeds)
 
         if self.float_mode == 'fp16':
             return embeddings.half()
@@ -85,14 +89,11 @@ class BERTLike(torch.nn.Module):
         if float_mode == 'fp16':
             if 'qembedder' in models:
                 self.qembedder.half()
+                gc.collect()
             if 'aembedder' in models:
                 self.aembedder.half()
-            #for el in self.qembedder.parameters():
-            #    el.half()
-            #    #print(list(el)[0].data.dtype)
-            #    assert(list(el)[0].data.dtype == torch.float16)
-            #for el in self.aembedder.parameters():
-            #    el.half()
+                gc.collect()
+        self.eval()
 
     def save_to(self, folder):
         if folder[-1] != '/':
@@ -137,15 +138,21 @@ class BERTLike(torch.nn.Module):
             self.qembedder.train()
         if self.has_aembedder():
             self.aembedder.train()
+        self.batch_mode = False
 
     def eval(self):
         if self.has_qembedder():
             self.qembedder.eval()
         if self.has_aembedder():
             self.aembedder.eval()
+        self.batch_mode = True
 
-class USEncoder(torch.nn.Module):
+class USEncoder(torch.nn.Module): # In progress
     def __init__(self, float_mode='fp32', lang='en'):
+        import tensorflow as tf
+        import tensorflow_hub as hub
+        import sentencepiece as spm
+
         self.embedder = hub.Module("https://tfhub.dev/google/universal-sentence-encoder-lite/2")
         self.qembedder = torch.nn.Sequntial([torch.nn.Linear(300, 300), \
                                             torch.nn.ReLU()])
