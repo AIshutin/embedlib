@@ -45,20 +45,21 @@ def config():
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
     criterion_func = 'hinge_loss'
-    batch_size = 10  # 16, 32 are recommended in the paper
+    batch_size = 16  # 16, 32 are recommended in the paper
+    statistic_accumalation = 100
 
     model_name = 'BERTLike'
     model_config = None
     if model_name is 'BERTLike':
         model_config = {'bert_type': 'bert-base-uncased',
-                    'lang': 'en', 'float_mode': 'fp16'}
+                    'lang': 'en', 'float_mode': 'fp32'}
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'en'}
     else:
         raise Exception('model is not defined')
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e2)
+    max_dataset_size = int(1e5)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -92,22 +93,14 @@ def get_model_optimizer(model):
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
-        metric_baseline_func, criterion_func, metric_name):
-    device = torch.device('cpu')
-    'cuda:0' if torch.cuda.is_available() else 'cpu'
+        metric_baseline_func, criterion_func, metric_name, statistic_accumalation):
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cpu'
-    mem_report()
-    #print('Sleep0')
-    time.sleep(30)
     writer = SummaryWriter()
     model = get_model()
     model.to(device)
     gc.collect()
-    mem_report()
-    print('Sleep')
-    time.sleep(100)
-    exit(0)
 
     train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
     metric = get_metric()
@@ -140,6 +133,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         total_train_score = 0
         total_mrr = 0
         batch_num = 0
+        curr_loss = 0
+        curr_score = 0
         for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
             optimizer.zero_grad()
 
@@ -147,10 +142,17 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             loss = criterion(*embeddings)
             score = metric(*embeddings)
             total_train_score += score
+            curr_loss += loss.item()
+            curr_score += score
 
-            writer.add_scalar("train/loss_dynamic", loss.item(), step)
-            writer.add_scalar("train/score_dynamic", score, step)
-            step += 1
+            if (bidx + 1) % statistic_accumalation == 0:
+                mean_loss = curr_loss / statistic_accumalation
+                mean_score = curr_score / statistic_accumalation
+                writer.add_scalar("train/loss_dynamic", mean_loss, step)
+                writer.add_scalar("train/score_dynamic", mean_score, step)
+                step += 1
+                curr_loss = curr_score = 0
+
             batch_num += 1
 
             total_loss += loss.item()
@@ -173,4 +175,4 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         model.save_to(checkpoint_name)
 
     val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
-                                                        test, load_model(checkpoint_name).to(device))
+                                            test, load_model(checkpoint_name).to(device))
