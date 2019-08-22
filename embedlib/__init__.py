@@ -22,9 +22,9 @@ class Embedder:
             return self.model.aembedd(batch)
 
 if __name__ == '__main__':
-    model = Embedder(None, 'checkpoints/the_first_weights')
-    model.model.to(torch.device('cpu'))
+    model = Embedder(None, '../ru-2-attentions')#'checkpoints/the_first_weights')
+    #model.model.to(torch.device('cpu'))
     gc.collect()
     assert(mem_report() <= 600)
-    model('I love cats')
     time.sleep(120)
+    model('I love cats')

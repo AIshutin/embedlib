@@ -51,10 +51,10 @@ def config():
     model_name = 'BERTLike'
     model_config = None
     if model_name is 'BERTLike':
-        model_config = {'bert_type': 'bert-base-uncased',
-                    'lang': 'en', 'float_mode': 'fp32'}
+        model_config = {'bert_type': '1-attentions',
+                    'lang': 'ru', 'float_mode': 'fp32'}
     elif model_name is 'USEncoder':
-        model_config = {'float_mode': 'fp32', 'lang': 'en'}
+        model_config = {'float_mode': 'fp32', 'lang': 'ru'}
     else:
         raise Exception('model is not defined')
 
@@ -95,7 +95,6 @@ def get_model_optimizer(model):
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name, statistic_accumalation):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    # 'cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cpu'
     writer = SummaryWriter()
     model = get_model()

@@ -4,19 +4,29 @@ from utils import mem_report
 import json
 import torch
 import time
+import gc
 
 def chop_last_attention_layer(tower, num=1):
     tower.encoder.layer = tower.encoder.layer[:-num]
     print(tower.encoder.layer)
     return tower
 
-model = BERTLike(bert_type='bert-base-uncased', lang='en', float_mode='fp16')
-num_last_lays = 1
+prev_model_dir =  "../rubert-base-uncased"
+if prev_model_dir is None:
+    model = BERTLike(bert_type='bert-base-uncased', lang='en', float_mode='fp32')
+else:
+    model = load_model(prev_model_dir)
+
+gc.collect()
+mem_report()
+
+num_last_lays = 11 
 model.qembedder = chop_last_attention_layer(model.qembedder, num_last_lays)
 model.aembedder = chop_last_attention_layer(model.aembedder, num_last_lays)
 
-dirname = '../11-attentions/'
+dirname = f'../ru-{12 - num_last_lays}-attentions/'
 model.save_to(dirname)
+
 
 def decrease_attention_lays_in_config(dirname, num=num_last_lays):
     states = json.load(open(f'{dirname}qembedder/config.json'))
@@ -30,5 +40,6 @@ del model
 model = load_model(dirname)
 #device = torch.device('cuda:0')
 #model.to(device)
+gc.collect()
 mem_report()
-time.sleep(120)
+#time.sleep(120)
