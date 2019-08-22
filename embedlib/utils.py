@@ -4,7 +4,7 @@ import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
 import json
-import models
+from . import models
 import gc
 
 def remove_urls (vTEXT):

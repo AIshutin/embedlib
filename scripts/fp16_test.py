@@ -1,4 +1,4 @@
-from utils import mem_report
+from embedlib.utils import mem_report
 import torch
 import time
 import gc
@@ -7,5 +7,5 @@ tensor = torch.randn(1024, 1024, device=device)
 mem_report()
 half = tensor.half()
 del tensor
-gc.collect() 
+gc.collect()
 mem_report()

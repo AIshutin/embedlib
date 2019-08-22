@@ -109,7 +109,7 @@ class BERTLike(torch.nn.Module):
             self.aembedder.save_pretrained(aname)
         self.tokenizer.save_pretrained(folder)
         config = {'float_mode': self.float_mode, 'name': self.__name__, \
-                 'lang': self.lang, 'bert_type': self.bert_type}
+                 'lang': self.lang, 'bert_type': self.bert_type, 'models': self.models}
         with open(f'{folder}model_config.json', 'w') as file:
             json.dump(config, file)
 
@@ -145,6 +145,9 @@ class BERTLike(torch.nn.Module):
             self.qembedder.eval()
         if self.has_aembedder():
             self.aembedder.eval()
+        #if self.lang == 'ru':
+        #    self.batch_mode = False
+        #else:
         self.batch_mode = True
 
 class USEncoder(torch.nn.Module): # In progress

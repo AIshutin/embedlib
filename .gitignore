@@ -3,13 +3,17 @@ corp.txt
 cc.en.300.bin
 11-attentions/
 rucorp.txt
-rubert*/
+#rubert*/
+ru*/
 dialogs/
 reddit_data/
 output/
+scripts/checkpoints/
+scripts/runs/
 pretrained-bert-base-uncased/
 embedlib/checkpoints/
 embedlib/runs/
+
 *.tgz
 
 # Byte-compiled / optimized / DLL files

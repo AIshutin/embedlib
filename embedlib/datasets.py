@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 import os
 import csv
-from utils import remove_urls
+from .utils import remove_urls
 from itertools import groupby
 import torch
 

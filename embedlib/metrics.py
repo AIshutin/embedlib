@@ -1,5 +1,5 @@
 import numpy as np
-from losses import cosine_similarity_table
+from .losses import cosine_similarity_table
 import torch
 from random import *
 
