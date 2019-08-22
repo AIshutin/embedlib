@@ -8,6 +8,8 @@ ru*/
 dialogs/
 reddit_data/
 output/
+scripts/checkpoints/
+scripts/runs/
 pretrained-bert-base-uncased/
 embedlib/checkpoints/
 embedlib/runs/

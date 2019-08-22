@@ -1,6 +1,6 @@
 import torch
-from utils import load_model
-from utils import mem_report
+from .utils import load_model
+from .utils import mem_report
 import gc
 import time
 

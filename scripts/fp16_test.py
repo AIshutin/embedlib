@@ -1,4 +1,4 @@
-from utils import mem_report
+from embedlib.utils import mem_report
 import torch
 import time
 import gc

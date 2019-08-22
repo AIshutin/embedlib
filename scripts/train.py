@@ -3,24 +3,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from tensorboardX import SummaryWriter
-from GPUtil import showUtilization as gpu_usage
-from utils import mem_report
 
 import numpy as np
 import pickle
 import tqdm
 
-import losses
-import metrics
-from metrics import get_mean_on_data
+import embedlib
+from embedlib.metrics import get_mean_on_data
 
-from utils import load_model
+from embedlib.utils import mem_report, load_model
+from embedlib import losses, metrics
 
-import datasets
-from datasets import collate_wrapper
+from embedlib.datasets import collate_wrapper
+from embedlib import datasets
 
-import models
-import optimizers
+from embedlib import models, optimizers
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -51,8 +48,8 @@ def config():
     model_name = 'BERTLike'
     model_config = None
     if model_name is 'BERTLike':
-        model_config = {'bert_type': '1-attentions',
-                    'lang': 'ru', 'float_mode': 'fp32'}
+        model_config = {'bert_type': 'bert-base-uncased',
+                    'lang': 'en', 'float_mode': 'fp32'}
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
     else:
@@ -74,22 +71,22 @@ def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, ma
 
 @ex.capture
 def get_metric(metric_func):
-    metric = getattr(metrics, metric_func)
+    metric = getattr(embedlib.metrics, metric_func)
     return metric
 
 @ex.capture
 def get_criterion(criterion_func):
-    criterion = getattr(losses, criterion_func)
+    criterion = getattr(embedlib.losses, criterion_func)
     return criterion
 
 @ex.capture
 def get_model(model_name, model_config):
-    model = getattr(models, model_name)(**model_config)
+    model = getattr(embedlib.models, model_name)(**model_config)
     return model
 
 @ex.capture
 def get_model_optimizer(model):
-    return getattr(optimizers, f'{model.__name__}Optimizer')
+    return getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
