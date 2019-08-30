@@ -1,6 +1,6 @@
-from models import BERTLike
-from utils import load_model
-from utils import mem_report
+from embedlib.models import BERTLike
+from embedlib.utils import load_model
+from embedlib.utils import mem_report
 import json
 import torch
 import time
@@ -20,7 +20,7 @@ else:
 gc.collect()
 mem_report()
 
-num_last_lays = 11 
+num_last_lays = 6
 model.qembedder = chop_last_attention_layer(model.qembedder, num_last_lays)
 model.aembedder = chop_last_attention_layer(model.aembedder, num_last_lays)
 

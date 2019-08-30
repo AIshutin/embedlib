@@ -1,6 +1,7 @@
 import torch
 from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
 from pytorch_transformers import BertModel, BertConfig
+import pickle
 
 import os
 import json
@@ -13,6 +14,13 @@ class BERTLike(torch.nn.Module):
     __name__ = 'BERTLike'
 
     def prepare_halfbatch(self, batch, device):
+        token = '[CLS]'
+
+        for i in range(len(batch)):
+            batch[i] = batch[i].strip()
+            if batch[i][:len(token)] != token:
+                batch[i] = token + ' ' + batch[i]
+
         if self.batch_mode:
             mx_len = 0
             encoded = [self.tokenizer.encode(el) for el in batch]
@@ -93,6 +101,7 @@ class BERTLike(torch.nn.Module):
             if 'aembedder' in models:
                 self.aembedder.half()
                 gc.collect()
+
         self.eval()
 
     def save_to(self, folder):
@@ -149,6 +158,65 @@ class BERTLike(torch.nn.Module):
         #    self.batch_mode = False
         #else:
         self.batch_mode = True
+
+class LASERembedder(torch.nn.Module):
+    __name__ = "LASERembedder"
+    max_seq_len = 1791791791 # INF
+
+    def __init__(self, lang, cache_dir=None):
+        #models=['aembedder', 'qembedder'], cache_dir=None):
+        super().__init__()
+        from laserembeddings import Laser
+        import pickle
+
+        self.laser = Laser()
+        self.lang = lang
+        #self.models = models
+
+        if cache_dir is None:
+            self.embedder = torch.nn.Sequential(
+                torch.nn.Linear(1024, 1024),
+                torch.nn.Tanh(),
+                torch.nn.Linear(1024, 1024),
+                torch.nn.Tanh(),
+                torch.nn.Linear(1024, 1024),
+            )
+        else:
+            self.embedder = pickle.load(open(f'{cache_dir}embedder', 'rb'))
+
+        embeddings = self.laser.embed_sentences(
+            ['let your neural network be polyglot',
+            'use multilingual embeddings!'],
+            lang='en')
+
+    def save_to(self, folder):
+        if folder[-1] != '/':
+            folder = folder + '/'
+        os.system(f'mkdir "{folder}"')
+        with open(f'{folder}embedder', 'wb') as f:
+             pickle.dump(self.embedder, f)
+        config = {'name': self.__name__, 'lang': self.lang}
+        with open(f'{folder}model_config.json', 'w') as file:
+            json.dump(config, file)
+
+    def eval(self):
+        self.embedder.eval()
+
+    def train(self):
+        self.embedder.train()
+
+    def forward(self, batch):
+        quests, answs = batch.quests, batch.answs
+        assert(len(quests) == len(answs))
+        return (self.qembedd(quests), self.aembedd(answs))
+
+    def qembedd(self, quests):
+        device = next(self.embedder.parameters()).device
+        laser = torch.tensor(self.laser.embed_sentences(quests, lang=self.lang), device=device)
+        return self.embedder(laser)
+
+    aembedd = qembedd
+    tokenizer = str
 
 class USEncoder(torch.nn.Module): # In progress
     def __init__(self, float_mode='fp32', lang='en'):

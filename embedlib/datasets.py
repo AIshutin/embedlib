@@ -92,7 +92,7 @@ class TwittCorpus(Dataset):
     def __init__(self, tokenizer, max_dataset_size=100, path='../rucorp.txt', max_seq_len=512):
         '''
         Gets Path to TXT file in format
-        [CLS] Qestion [SEP] \n
+        [CLS] Question [SEP] \n
         [CLS] Answer [SEP]\n
         \n
         ...
@@ -100,11 +100,37 @@ class TwittCorpus(Dataset):
         super().__init__()
         with open(path, 'r') as f:
             reps = f.readlines()
-        dgs = [list(group) for k, group in groupby(reps, lambda x: x == '\n') if not k]
+        """
+        state
+        0 - q
+        1 - a
+        """
+        state = 0
+        dialogs = []
+        quest = answ = ""
+        start_tag = "[CLS]"
+        end_tag = "[SEP]"
+        for line in reps:
+            line = line.strip()
+            if state == 0:
+                quest = quest + line
+                if end_tag in line:
+                    state = 1
+            else:
+                answ = answ + line
+                if end_tag in line:
+                    dialogs.append([quest, answ])
+                    quest = answ = ""
+                    state = 0
         good = []
-        for el in dgs:
-            el[0] = el[0].replace('[SEP]', '').rstrip()
-            el[1] = el[1].replace('[SEP]', '').rstrip()
+        for el in dialogs:
+            try:
+                el[0] = el[0].replace('[SEP]', '').rstrip()
+                el[1] = el[1].replace('[SEP]', '').rstrip()
+            except Exception as exp:
+                print(exp)
+                print(el)
+                raise exp
             qtok = tokenizer.encode(el[0])
             atok = tokenizer.encode(el[1])
             if max(len(qtok), len(atok)) <= max_seq_len:
@@ -122,7 +148,8 @@ class TwittCorpus(Dataset):
 
 corpus_handler = {'en-ubuntu-corpus': (UbuntuCorpus, '../dialogs'), \
                 'en-twitt-corpus': (TwittCorpus, '../corp.txt'), \
-                'ru-opendialog-corpus': (TwittCorpus, '../rucorp.txt')}
+                'ru-opendialog-corpus': (TwittCorpus, '../rucorp-subtitles.txt'), \
+                'ru-toloka': (TwittCorpus, '../rucorp.txt')}
 
 class CorpusData(Dataset):
     def __init__(self, names, tokenizer, max_dataset_size=100, max_seq_len=512):
