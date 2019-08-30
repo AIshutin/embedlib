@@ -35,39 +35,42 @@ def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 3
+    epochs = 30
     warmup = 0.1
 
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
     criterion_func = 'hinge_loss'
-    batch_size = 16  # 16, 32 are recommended in the paper
+    batch_size = 128  # 16, 32 are recommended in the paper
+    test_batch_size = 16 # batch_size
     statistic_accumalation = 100
 
-    model_name = 'BERTLike'
+    model_name = 'LASERembedder'
     model_config = None
     if model_name is 'BERTLike':
-        model_config = {'bert_type': 'bert-base-uncased',
-                    'lang': 'en', 'float_mode': 'fp32'}
+        model_config = {'bert_type': '-6-attentions',
+                    'lang': 'ru', 'float_mode': 'fp32'}
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
+    elif model_name is 'LASERembedder':
+        model_config = {'lang': 'en'}
     else:
         raise Exception('model is not defined')
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e5)
+    max_dataset_size = int(1e9)
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
-            dataset_names):
+            dataset_names, test_batch_size):
     corpus = datasets.CorpusData(dataset_names, tokenizer, max_dataset_size)
     _log.info(f"Corpus size: {len(corpus)}")
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
     return DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper), \
-           DataLoader(test_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper)
+           DataLoader(test_data, batch_size=test_batch_size, shuffle=True, collate_fn=collate_wrapper)
 
 @ex.capture
 def get_metric(metric_func):
@@ -146,6 +149,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
                 mean_score = curr_score / statistic_accumalation
                 writer.add_scalar("train/loss_dynamic", mean_loss, step)
                 writer.add_scalar("train/score_dynamic", mean_score, step)
+                #print(mean_loss, mean_score, step)
                 step += 1
                 curr_loss = curr_score = 0
 
