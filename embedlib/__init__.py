@@ -25,9 +25,9 @@ class Embedder:
 
         with torch.no_grad():
             if is_question:
-                return self.normalize(self.model.qembedd(batch)).detach().numpy()
+                return self.normalize(self.model.qembedd(batch)).numpy()
             else:
-                return self.normalize(self.model.aembedd(batch)).detach().numpy()
+                return self.normalize(self.model.aembedd(batch)).numpy()
 
 def similarity(a, b):
     #print(a.shape)
