@@ -1,6 +1,6 @@
 FROM python:3.7
 
-RUN pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+RUN pip3 install torch torchvision #torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
 
 RUN pip3 install numpy
 
@@ -12,7 +12,7 @@ RUN pip3 install laserembeddings
 RUN python3 -m laserembeddings download-models
 
 #COPY ru-6-attentions /app/model/
-COPY laser-3lays-twitt-mrr0.5947 /app/model/
+COPY laser-3lays-twitt-mrr0.67 /app/model/
 
 COPY memory_checker.py /app/memory_checker.py
 

@@ -1,16 +1,14 @@
-from utils import load_model
-from datasets import CorpusData, collate_wrapper
+from embedlib.utils import load_model, print_batch, mem_report
+from embedlib.datasets import CorpusData, collate_wrapper
 from torch.utils.data import Dataset, DataLoader, Subset
-from utils import print_batch
-from metrics import calc_mrr
-from utils import mem_report
-import metrics
+from embedlib.metrics import calc_mrr
+from embedlib import metrics
 import sys
 import torch
 import time
 import gc
 
-device = torch.device('cpu') # 'cuda:0' if torch.cuda.is_available() else
+device = torch.device('cuda:0') # 'cuda:0' if torch.cuda.is_available() else
 
 if len(sys.argv) >= 2:
     checkpoint = sys.argv[1]
@@ -19,10 +17,10 @@ else:
 
 model = load_model(checkpoint).to(device)
 
-max_dataset_size = int(1e1)
+max_dataset_size = int(1e5)
 batch_size = 16
 
-dataset_name = 'ru-opendialog-corpus' # 'en-twitt-corpus' # 'ru-opendialog-corpus'
+dataset_name = 'ru-toloka' # 'en-twitt-corpus' # 'ru-opendialog-corpus'
 verbal = False
 
 if verbal:
@@ -41,8 +39,6 @@ if verbal:
 else:
     full_dataset = CorpusData([dataset_name], model.tokenizer, max_dataset_size)
     gc.collect()
-    mem_report()
-    time.sleep(120)
     loader = DataLoader(full_dataset, batch_size=batch_size, collate_fn=collate_wrapper)
     print(metrics.get_mean_on_data([calc_mrr], loader, model))
     print(metrics.calc_random_mrr(batch_size))

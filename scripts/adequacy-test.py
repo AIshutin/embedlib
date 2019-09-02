@@ -23,7 +23,7 @@ def evaluate_task(quest, answs, silent=False):
     return errors
 
 model_name = 'laser-3lays-twitt-mrr0.5947' # '../ru-1-attention-finetuned' "../rubert-base-uncased"
-model = embedlib.Embedder(None, f"../{model_name}")
+model = embedlib.Embedder('???', f"../{model_name}")
 
 total_erros = 0
 with open(sys.argv[1], encoding="utf-8") as file:

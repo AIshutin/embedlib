@@ -28,6 +28,13 @@ import time
 import gc
 
 ex = Experiment()
+
+password = '8jxIlp0znlJm8qhL' # +srv
+observer = MongoObserver.create(url=f'mongodb+srv://cerebra-autofaq:{password}@testing-pjmjc.gcp.mongodb.net/test?retryWrites=true&w=majority&authMechanism=SCRAM-SHA-1',
+                                db_name='experiments',
+                                port=27017)
+ex.observers.append(observer)
+
 # ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
 @ex.config
@@ -35,7 +42,7 @@ def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 30
+    epochs = 10
     warmup = 0.1
 
     metric_name = 'mrr'
@@ -46,6 +53,11 @@ def config():
     test_batch_size = 16 # batch_size
     statistic_accumalation = 100
 
+    continue_training_from_checkpoint = f'{checkpoint_dir}epoch: 7 calc_mrr:   0.6530 hinge_loss:   0.5270'
+
+    f'{checkpoint_dir}epoch:14 calc_mrr:   0.6326 hinge_loss:  26.4854'
+    # None if not
+
     model_name = 'LASERembedder'
     model_config = None
     if model_name is 'BERTLike':
@@ -54,7 +66,7 @@ def config():
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
     elif model_name is 'LASERembedder':
-        model_config = {'lang': 'en'}
+        model_config = {'lang': 'en', 'lay_num': 3}
     else:
         raise Exception('model is not defined')
 
@@ -83,9 +95,10 @@ def get_criterion(criterion_func):
     return criterion
 
 @ex.capture
-def get_model(model_name, model_config):
-    model = getattr(embedlib.models, model_name)(**model_config)
-    return model
+def get_model(model_name, model_config, continue_training_from_checkpoint):
+    if continue_training_from_checkpoint is not None:
+        return embedlib.utils.load_model(continue_training_from_checkpoint)
+    return getattr(embedlib.models, model_name)(**model_config)
 
 @ex.capture
 def get_model_optimizer(model):
@@ -93,7 +106,8 @@ def get_model_optimizer(model):
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
-        metric_baseline_func, criterion_func, metric_name, statistic_accumalation):
+        metric_baseline_func, criterion_func, metric_name, statistic_accumalation, \
+        test_batch_size):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cpu'
     writer = SummaryWriter()
@@ -121,9 +135,11 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     _log.info(f"  Num steps = {num_train_optimization_steps}")
     _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
-    _log.info(f"Random choice score: {metric_baseline(batch_size):9.4f}")
+    _log.info(f"Random choice score: {metric_baseline(test_batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
     writer.add_scalar("val/loss", val_loss_before, 0)
+    ex.log_scalar("val.score", val_score_before)
+    ex.log_scalar("val.loss", val_loss_before)
 
     step = 0
     for epoch in range(epochs):
@@ -149,6 +165,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
                 mean_score = curr_score / statistic_accumalation
                 writer.add_scalar("train/loss_dynamic", mean_loss, step)
                 writer.add_scalar("train/score_dynamic", mean_score, step)
+                ex.log_scalar("train.loss_dynamic", mean_loss)
+                ex.log_scalar("train.score_dynamic", mean_score)
                 #print(mean_loss, mean_score, step)
                 step += 1
                 curr_loss = curr_score = 0
@@ -169,6 +187,11 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         writer.add_scalar("val/loss", val_loss, epoch + 1)
         writer.add_scalar("train/total_loss", total_loss, epoch)
         writer.add_scalar("train/total_score", mean_train_score, epoch)
+
+        ex.log_scalar("val.score", val_score)
+        ex.log_scalar("val.loss", val_loss)
+        ex.log_scalar("train.total_loss", total_loss)
+        ex.log_scalar("train.total_score", mean_train_score)
 
         _log.info(f"score:{val_score:9.4f} | loss:{total_loss:9.4f}")
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
