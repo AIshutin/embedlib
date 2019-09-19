@@ -71,11 +71,14 @@ class BERTLike(torch.nn.Module):
             self.aembedder = BertModel.from_pretrained(f'{cache_dir}aembedder/')
 
     def __init__(self, lang, bert_type, float_mode='fp32', \
-            models=['aembedder', 'qembedder'], cache_dir=None):
+            models=['aembedder', 'qembedder'], cache_dir=None, version='???'):
         super().__init__()
+
         self.lang = lang
         self.bert_type = bert_type
         self.models = models
+        self.version = version
+
         if lang == 'en':
             if cache_dir is None:
                 cache_dir = f'../pretrained-{bert_type}/'
@@ -118,7 +121,8 @@ class BERTLike(torch.nn.Module):
             self.aembedder.save_pretrained(aname)
         self.tokenizer.save_pretrained(folder)
         config = {'float_mode': self.float_mode, 'name': self.__name__, \
-                 'lang': self.lang, 'bert_type': self.bert_type, 'models': self.models}
+                 'lang': self.lang, 'bert_type': self.bert_type, \
+                 'models': self.models, 'version': self.version}
         with open(f'{folder}model_config.json', 'w') as file:
             json.dump(config, file)
 
@@ -159,51 +163,38 @@ class BERTLike(torch.nn.Module):
         #else:
         self.batch_mode = True
 
-class LASERembedder(torch.nn.Module):
-    __name__ = "LASERembedder"
-    max_seq_len = 1791791791 # INF
-
-    def __init__(self, lang, cache_dir=None):
-        #models=['aembedder', 'qembedder'], cache_dir=None):
+class LASERprotoembedder(torch.nn.Module):
+    max_seq_len = 1791791791
+    __name__ = "LASERprotoembedder"
+    def __init__(self, **kwargs):
         super().__init__()
         from laserembeddings import Laser
         import pickle
 
         self.laser = Laser()
-        self.lang = lang
-        #self.models = models
-
-        if cache_dir is None:
-            self.embedder = torch.nn.Sequential(
-                torch.nn.Linear(1024, 1024),
-                torch.nn.Tanh(),
-                torch.nn.Linear(1024, 1024),
-                torch.nn.Tanh(),
-                torch.nn.Linear(1024, 1024),
-            )
-        else:
-            self.embedder = pickle.load(open(f'{cache_dir}embedder', 'rb'))
-
-        embeddings = self.laser.embed_sentences(
-            ['let your neural network be polyglot',
-            'use multilingual embeddings!'],
-            lang='en')
+        self.lang = kwargs['lang']
+        self.version = kwargs['version']
+        if 'name' not in kwargs:
+            kwargs['name'] = self.__name__
+        self._config = kwargs
 
     def save_to(self, folder):
         if folder[-1] != '/':
             folder = folder + '/'
         os.system(f'mkdir "{folder}"')
         with open(f'{folder}embedder', 'wb') as f:
-             pickle.dump(self.embedder, f)
-        config = {'name': self.__name__, 'lang': self.lang}
+            pickle.dump(self.embedder, f)
         with open(f'{folder}model_config.json', 'w') as file:
-            json.dump(config, file)
+            json.dump(self._config, file)
 
     def eval(self):
         self.embedder.eval()
 
     def train(self):
         self.embedder.train()
+
+    def add_embedder(self, embedder):
+        self.embedder = embedder
 
     def forward(self, batch):
         quests, answs = batch.quests, batch.answs
@@ -213,10 +204,67 @@ class LASERembedder(torch.nn.Module):
     def qembedd(self, quests):
         device = next(self.embedder.parameters()).device
         laser = torch.tensor(self.laser.embed_sentences(quests, lang=self.lang), device=device)
-        return self.embedder(laser)
+        res = self.embedder(laser)
+        return res # .view(-1, 1024, 1,)
 
     aembedd = qembedd
     tokenizer = str
+
+class LASERembedder(LASERprotoembedder):
+    __name__ = 'LASERembedder'
+
+    def __init__(self, lang, cache_dir=None, lay_num=5, version='???'):
+        super().__init__(lang=lang, version=version, lay_num=lay_num, name=self.__name__)
+
+        if cache_dir is None:
+            modules = []
+            for i in range(1, 1 + lay_num):
+                modules.append(torch.nn.Linear(1024, 1024))
+                if i != lay_num:
+                    #modules.append(torch.nn.BatchNorm1d(1024))
+                    modules.append(torch.nn.LayerNorm(1024))
+                    modules.append(torch.nn.ReLU())
+                    modules.append(torch.nn.Dropout(0.1))
+            self.add_embedder(torch.nn.Sequential(*modules))
+        else:
+            self.add_embedder(pickle.load(open(f'{cache_dir}embedder', 'rb')))
+
+class TransformerInputReshaper(torch.nn.Module):
+    """
+    (batch_size, laser_embed) --> (1, batch_size, laser_embed)
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, data):
+        return data.view(1, -1, data.shape[-1])
+
+class TransformerOutputReshaper(torch.nn.Module):
+    """
+    (1, batch_size, laser_embed) --> (batch_size, laser_embed)
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, data):
+        return data[0]
+
+class LASERtransformer_embedder(LASERprotoembedder):
+    __name__ = 'LASERtransformer_embedder'
+
+    def __init__(self, lang, cache_dir=None, lay_num=3, version='???'):
+        super().__init__(lang=lang, version=version, lay_num=lay_num, name=self.__name__)
+
+        if cache_dir is None:
+            net = torch.nn.TransformerEncoder(torch.nn.TransformerEncoderLayer(d_model=1024,
+                                                                                nhead=8,
+                                                                                dim_feedforward=1024),
+                                            lay_num)
+            modules = [TransformerInputReshaper(), net, TransformerOutputReshaper()]
+            self.add_embedder(torch.nn.Sequential(*modules))
+        else:
+            self.add_embedder(pickle.load(open(f'{cache_dir}embedder', 'rb')))
+
 
 class USEncoder(torch.nn.Module): # In progress
     def __init__(self, float_mode='fp32', lang='en'):
