@@ -1,7 +1,7 @@
 from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
 from torch.optim import Adam
 
-class LASERembedderOptimizer:
+class LASERprotoembedderOptimizer:
     def __init__(self, model, num_train_optimization_steps, num_warmup_steps, learning_rate=1e-4, warmup=0.1):
         self.optim = Adam(model.embedder.parameters(), lr=learning_rate)
 
@@ -12,6 +12,12 @@ class LASERembedderOptimizer:
     def zero_grad(self):
         self.optim.zero_grad()
         pass
+
+class LASERembedderOptimizer(LASERprotoembedderOptimizer):
+    pass
+
+class LASERtransformer_embedderOptimizer(LASERprotoembedderOptimizer):
+    pass
 
 class BERTLikeOptimizer: # (torch.optim.Optimizer):
     # https://pytorch.org/docs/stable/_modules/torch/optim/sgd.html#SGD example

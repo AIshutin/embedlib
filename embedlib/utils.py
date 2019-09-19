@@ -26,10 +26,14 @@ def load_model(checkpoint_dir):
         checkpoint_dir = checkpoint_dir + '/'
     print(f"loading model from {checkpoint_dir}")
     config = json.load(open(f'{checkpoint_dir}model_config.json'))
-    name = config['name']
-    config.pop('name')
+    if 'name' in config:
+        name = config['name']
+        config.pop('name')
+    else:
+        name = config['__name__']
+        config.pop('__name__')
     config['cache_dir'] = checkpoint_dir
-    print(f"CONFIG {config}")
+    print(f"CONFIG {config}", name)
     return getattr(models, name)(**config)
 
 ## MEM utils ##

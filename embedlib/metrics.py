@@ -32,6 +32,9 @@ def calc_mrr(X, Y, silent=True):
     assert(mrr <= 1.01)
     return mrr
 
+def calc_placeholder_metric(X, Y):
+    return 0
+
 def calc_random_mrr(batch_size):
     mrrs = 0
     for i in range(1, 1 + batch_size):

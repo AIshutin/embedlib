@@ -1,6 +1,6 @@
 from embedlib import similarity
 import embedlib
-model = embedlib.Embedder('???', '../laser-3lays-mrr0.67')
+model = embedlib.Embedder('???', 'laser-3lays-transformer-mrr0.8')
 # "../rubert-base-uncased")#"../ru-6-attentions")
 
 pizza = "Я хочу заказать пиццу"
