@@ -21,6 +21,7 @@ from embedlib import models, optimizers
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
+from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
 
 import logging
 import os
@@ -50,8 +51,8 @@ def config():
     metric_name = 'mrr'
     metric_func = f'calc_{metric_name}'
     metric_baseline_func = f'calc_random_{metric_name}'
-    criterion_func = 'hinge_loss'
-    batch_size = 128  # 16, 32 are recommended in the paper
+    criterion_func = 'simple_loss'
+    batch_size = 16  # 16, 32 are recommended in the paper
     test_batch_size = 16 # batch_size
     statistic_accumalation = 100
 
@@ -59,11 +60,11 @@ def config():
     #f'{checkpoint_dir}epoch: 9 calc_mrr:   0.7970 hinge_loss:   0.1879'
     # None if not
 
-    model_name = 'LASERembedder'
+    model_name = 'BERTLike'
     model_config = None
     if model_name is 'BERTLike':
-        model_config = {'bert_type': '-6-attentions',
-                    'lang': 'ru', 'float_mode': 'fp32'}
+        model_config = {'bert_type': 'bert-base-uncased',
+                    'lang': 'en', 'float_mode': 'fp32'}
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
     elif model_name is 'LASERembedder' or 'LASERtransformer_embedder':
@@ -73,6 +74,10 @@ def config():
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
     max_dataset_size = int(1e2)
+
+    tpu = False
+    has_scheduler = False
+    scheduler_warmup = 0.1
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -103,15 +108,28 @@ def get_model(model_name, model_config, continue_training_from_checkpoint):
 
 @ex.capture
 def get_model_optimizer(model):
-    return getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
+    return AdamW
+    # getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name, statistic_accumalation, \
-        test_batch_size, seed):
-
+        test_batch_size, seed, tpu, has_scheduler, scheduler_warmup):
+    print('epochs', epochs)
     torch.manual_seed(seed)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if tpu:
+        os.environ["TPU_IP_ADDRESS"] = 'grpc://' + os.environ["COLAB_TPU_ADDR"]
+
+        assert "TPU_IP_ADDRESS" in os.environ
+        assert "TPU_NAME" in os.environ
+        assert "XRT_TPU_CONFIG" in os.environ
+
+        import torch_xla
+        import torch_xla.core.xla_model as xm
+        device = xm.xla_device()
+        xla_model = xm
+    else:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # 'cpu'
     writer = SummaryWriter()
     model = get_model()
@@ -125,25 +143,33 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
     num_train_optimization_steps = len(train) * epochs
 
+    tsor = torch.tensor([.1, .2, .3], device=device)
+    print(tsor)
+    print(tsor[1])
+    print(tsor[1].item())
+    print(list(tsor))
+
     num_warmup_steps = int(warmup * num_train_optimization_steps)
+    optimizer = get_model_optimizer(model)(list(model.qembedder.parameters()) \
+                                           + list(model.aembedder.parameters()), lr=learning_rate)
+    '''if has_scheduler:
+        schelduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, \
+                                        t_total=num_train_optimization_steps, warmup=scheduler_warmup)
 
-    optimizer = get_model_optimizer(model)(model, num_train_optimization_steps=num_train_optimization_steps,\
-                                            num_warmup_steps=num_warmup_steps,\
-                                            warmup=warmup,\
-                                            learning_rate=learning_rate)
-
-    val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
-                                                                test, model)
+    with torch.no_grad():
+        val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
+                                                                    test, model)
     val_loss_before = val_loss_before.item()
     _log.info("***** Running training *****")
-    _log.info(f"  Num steps = {num_train_optimization_steps}")
+    _log.info(f"  Num steps
+Step is done!!!!!!!!!!!!!!!!!s = {num_train_optimization_steps}")
     _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(test_batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
     writer.add_scalar("val/loss", val_loss_before, 0)
     ex.log_scalar("val.score", val_score_before)
-    ex.log_scalar("val.loss", val_loss_before)
+    ex.log_scalar("val.loss", val_loss_before)'''
 
     step = 0
     for epoch in range(epochs):
@@ -159,10 +185,14 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
             embeddings = model(batch)
             loss = criterion(*embeddings)
-            score = metric(*embeddings)
-            total_train_score += score
-            curr_loss += loss.item()
-            curr_score += score
+            print('LOSS is calculated', flush=True)
+            #score = metric(*embeddings)
+            #print('Score is calculated', flush=True)
+            #total_train_score += score
+            it = loss.item()
+            print('itemed()', flush=True)
+            curr_loss += it
+            #curr_score += score
 
             if (bidx + 1) % statistic_accumalation == 0:
                 mean_loss = curr_loss / statistic_accumalation
@@ -177,14 +207,26 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
             batch_num += 1
 
-            total_loss += loss.item()
+            total_loss += it
+            print('Loss before backward', flush=True)
             loss.backward()
+            print('Backwarded', flush=True)
 
-            optimizer.step()
+            if tpu:
+                print('xla optimization', flush=True)
+                xla_model.optimizer_step(optimizer, barrier=True)
+                print('zero_grad problems', flush=True)
+                model.zero_grad()
+                print('Step is done!!!!!!!!!!!!!!!!!!!!', flush=True)
+            else:
+                optimizer.step()
+
+            if has_scheduler:
+                schelduler.step()
+
 
         mean_train_score = total_train_score / batch_num
 
-        # ToDo do something with score
         val_score, val_loss = metrics.get_mean_on_data([metric, criterion], test, \
                                                         model)
         val_loss = val_loss.item()

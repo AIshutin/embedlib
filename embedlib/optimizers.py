@@ -1,4 +1,4 @@
-from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+'''from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
 from torch.optim import Adam
 
 class LASERprotoembedderOptimizer:
@@ -61,3 +61,5 @@ class USEncoderOptimizer:
     def zero_grad(self):
         self.qoptim.zero_grad()
         self.aoptim.zero_grad()
+
+'''

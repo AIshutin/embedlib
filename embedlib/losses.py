@@ -20,21 +20,26 @@ def bce_loss(X, Y, conf_true=0.9, conf_false=0.1):
     weights = identity + non_diagonal / (n - 1)
     return F.binary_cross_entropy_with_logits(logits, targets, weights) * n
 
+def simple_loss(X, Y):
+    return X.mean() + Y.mean()
 
 def hinge_loss(X, Y, margin=0.1):
     batch_size = X.shape[0]
     assert(X.shape[0] == Y.shape[0])
+    print('hinge_loss')
     similarities = cosine_similarity_table(X, Y)
-
+    print('cosine done')
     identity = torch.eye(batch_size, device=X.device)
     if similarities.dtype == torch.half or similarities.dtype == torch.float16:
         identity = identity.half()
+    print('device transfere done')
     non_diagonal = torch.ones_like(similarities) - identity
 
     targets = identity - non_diagonal
     weights = identity + non_diagonal / (batch_size - 1)
 
     losses = torch.pow(F.relu(margin - targets * similarities), 2)
+    print('calculated')
     return torch.mean(losses * weights)
 
 

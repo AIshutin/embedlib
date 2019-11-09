@@ -78,7 +78,7 @@ class BERTLike(torch.nn.Module):
         self.bert_type = bert_type
         self.models = models
         self.version = version
-
+        print(cache_dir, lang, bert_type)
         if lang == 'en':
             if cache_dir is None:
                 cache_dir = f'../pretrained-{bert_type}/'
@@ -115,7 +115,7 @@ class BERTLike(torch.nn.Module):
         aname = f'{folder}aembedder/'
         os.system(f'mkdir "{qname}"')
         os.system(f'mkdir "{aname}"')
-        if 'qembedder' in self.models:
+        if 'qembedder' in'LASERembedder':
             self.qembedder.save_pretrained(qname)
         if 'aembedder' in self.models:
             self.aembedder.save_pretrained(aname)

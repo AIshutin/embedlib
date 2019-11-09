@@ -16,20 +16,22 @@ def calc_random_accuracy(batch_size):
     return 1 / N_batch
 
 def calc_mrr(X, Y, silent=True):
-    csim = cosine_similarity_table(X, Y)
-    n = csim.shape[0]
-    mrr = 0
-    for i in range(n):
-        arr = [(el.item(), idx) for (idx, el) in enumerate(list(csim[i]))]
-        arr.sort(reverse=True)
-        for j in range(len(arr)):
-            if arr[j][1] == i:
-                if not silent:
-                    print(f"q{i} right pos: {j}")
-                mrr += 1 / (j + 1)
-                break
-    mrr /= n
-    assert(mrr <= 1.01)
+    print('cosine')
+    with torch.no_grad():
+        print('ln21', 'cosine_similarity_table' )
+        csim = cosine_similarity_table(X, Y).detach().cpu().numpy()
+        n = csim.shape[0]
+        mrr = 0
+        for i in range(n):
+            print('it1')
+            ind = csim[i][i]
+            csim[i].sort()
+            print('it1..')
+            mrr += 1 / (csim[i].shape[0] - np.searchsorted(csim[i], ind))
+            print('it1!!')
+        mrr /= n
+        print('done')
+        assert(mrr <= 1.01)
     return mrr
 
 def calc_placeholder_metric(X, Y):
@@ -49,7 +51,9 @@ def get_mean_on_data(metric, data, model):
     testbatch_cnt = 0
     with torch.no_grad():
         for batch in data:
+            print('in')
             embeddings = model(batch)
+            print('metric')
             for i in range(len(metric)):
                 curr = metric[i](*embeddings)
                 if results[i] is None:
@@ -57,4 +61,5 @@ def get_mean_on_data(metric, data, model):
                 else:
                     results[i] += curr
             testbatch_cnt += 1
+            print('out')
     return [el / testbatch_cnt for el in results]
