@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+
 from tensorboardX import SummaryWriter
 
 import numpy as np
@@ -156,12 +158,14 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
     num_warmup_steps = int(warmup * num_train_optimization_steps)
 
-    optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate)
+
 
     if multigpu:
+        optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate / hvd.size())
         optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
         hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-
+    else:
+        optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate)
     if has_scheduler:
         scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, \
                                     t_total=num_train_optimization_steps)
