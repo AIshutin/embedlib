@@ -5,6 +5,7 @@ laser*
 rucorp-subtitles.txt
 scripts/docker-memtest/embedlib/
 scripts/docker-memtest/setup.py
+*.zip
 
 11-attentions/
 rucorp.txt

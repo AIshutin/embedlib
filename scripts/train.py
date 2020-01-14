@@ -61,9 +61,12 @@ def config():
 
     model_name = 'LASERembedder'
     model_config = None
+    has_scheduler = False
     if model_name is 'BERTLike':
         model_config = {'bert_type': '-6-attentions',
                     'lang': 'ru', 'float_mode': 'fp32'}
+        has_scheduler = False
+        warmup = 0.1
     elif model_name is 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
     elif model_name is 'LASERembedder' or 'LASERtransformer_embedder':
@@ -72,18 +75,34 @@ def config():
         raise Exception('model is not defined')
 
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
-    max_dataset_size = int(1e2)
+    max_dataset_size = int(1e5)
+    multigpu = True
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
-            dataset_names, test_batch_size):
+            dataset_names, test_batch_size, multigpu):
+    if multigpu:
+        import horovod.torch as hvd
     corpus = datasets.CorpusData(dataset_names, tokenizer, max_dataset_size)
-    _log.info(f"Corpus size: {len(corpus)}")
+    _log.info("Corpus size: " + str(len(corpus)))
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
-    return DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_wrapper), \
-           DataLoader(test_data, batch_size=test_batch_size, shuffle=True, collate_fn=collate_wrapper)
+
+    if multigpu:
+        print('MultiDataset')
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+                    train_data, num_replicas=hvd.size(), rank=hvd.rank())
+        test_sampler = torch.utils.data.distributed.DistributedSampler(
+                    test_data, num_replicas=hvd.size(), rank=hvd.rank())
+        shuffle = False
+    else:
+        train_sampler = None
+        test_sampler = None
+        shuffle = True
+
+    return DataLoader(train_data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_wrapper, sampler=train_sampler), \
+           DataLoader(test_data, batch_size=test_batch_size, shuffle=shuffle, collate_fn=collate_wrapper, sampler=test_sampler)
 
 @ex.capture
 def get_metric(metric_func):
@@ -96,29 +115,39 @@ def get_criterion(criterion_func):
     return criterion
 
 @ex.capture
-def get_model(model_name, model_config, continue_training_from_checkpoint):
+def get_model(model_name, model_config, continue_training_from_checkpoint, multigpu):
     if continue_training_from_checkpoint is not None:
         return embedlib.utils.load_model(continue_training_from_checkpoint)
     return getattr(embedlib.models, model_name)(**model_config)
 
 @ex.capture
 def get_model_optimizer(model):
-    return getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
+    return AdamW
+    #return getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name, statistic_accumalation, \
-        test_batch_size, seed):
+        test_batch_size, seed, has_scheduler, multigpu):
 
     torch.manual_seed(seed)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    # 'cpu'
+    #assert(not has_scheduler or not multigpu)
+
+    if multigpu:
+        import horovod.torch as hvd
+        # Initialize Horovod
+        hvd.init()
+        torch.cuda.set_device(hvd.local_rank())
+        device = torch.cuda.current_device()
+    else:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     writer = SummaryWriter()
     model = get_model()
     model.to(device)
     gc.collect()
 
     train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
+
     metric = get_metric()
     metric_baseline = get_metric(metric_baseline_func)
     criterion = get_criterion()
@@ -127,10 +156,15 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
     num_warmup_steps = int(warmup * num_train_optimization_steps)
 
-    optimizer = get_model_optimizer(model)(model, num_train_optimization_steps=num_train_optimization_steps,\
-                                            num_warmup_steps=num_warmup_steps,\
-                                            warmup=warmup,\
-                                            learning_rate=learning_rate)
+    optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate)
+
+    if multigpu:
+        optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+        hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+
+    if has_scheduler:
+        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, \
+                                    t_total=num_train_optimization_steps)
 
     val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
                                                                 test, model)
@@ -181,6 +215,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
             loss.backward()
 
             optimizer.step()
+            if has_scheduler:
+                scheduler.step()
 
         mean_train_score = total_train_score / batch_num
 

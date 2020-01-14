@@ -1,0 +1,41 @@
+ZONE="us-west1-b"
+NAME="tensorflow-1-vm-vm"
+echo $ZONE
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse embedlib $NAME:~/qa-ml/embedlib
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse setup.py  $NAME:~/qa-ml/setup.py
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse corp.txt  $NAME:~/corp.txt
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse scripts/train.py $NAME:~/qa-ml/train.py
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse ../nvidia-machine-learning-repo-ubuntu1604_1.0.0-1_amd64.deb $NAME:~/nvidia.deb
+gcloud compute scp --project linen-totality-187617 --zone $ZONE --recurse pretrained-bert-base-uncased $NAME:~/qa-ml/
+
+# On server side
+# gcloud beta compute --project "linen-totality-187617" ssh --zone $ZONE $NAME
+# mkdir qa-ml
+# sudo apt install software-properties-common
+# sudo rm /opt/anaconda3 -r
+# sudo pip3 install pytorch_transformers tensorboardX sacred pymongo dnspython
+# sudo dpkg -i nvidia.deb
+# sudo apt-get update
+# sudo apt install libnccl2=2.5.6-1+cuda10.0 libnccl-dev=2.5.6-1+cuda10.0
+# wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.0.tar.gz
+# gunzip -c openmpi-*.tar.gz | tar xf -
+# cd openmpi-4.0.0
+# ./configure --prefix=/usr/local
+# sudo make all install
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/nccl2/lib/
+# pip3 install --no-cache-dir --user horovod
+# mpirun -np 2 -H localhost:2 python3 train.py
+
+Libraries have been installed in:
+   /usr/local/lib/openmpi
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the '-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the 'LD_RUN_PATH' environment variable
+     during linking
+   - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to '/etc/ld.so.conf'
