@@ -31,29 +31,28 @@ import gc
 
 ex = Experiment()
 
-password = '8jxIlp0znlJm8qhL' # +srv
 # omniboard --mu "mongodb+srv://cerebra-autofaq:8jxIlp0znlJm8qhL@testing-pjmjc.gcp.mongodb.net/experiments?retryWrites=true&w=majority&authMechanism=SCRAM-SHA-1"
-observer = MongoObserver.create(url=f'mongodb+srv://cerebra-autofaq:{password}@testing-pjmjc.gcp.mongodb.net/test?retryWrites=true&w=majority&authMechanism=SCRAM-SHA-1',
-                                db_name='experiments',
+observer = MongoObserver.create(url='mongodb+srv://cerebra-autofaq:8jxIlp0znlJm8qhL@testing-pjmjc.gcp.mongodb.net/test?retryWrites=true&w=majority&authMechanism=SCRAM-SHA-1', \
+                                db_name='experiments', \
                                 port=27017)
 ex.observers.append(observer)
 
-# ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
+#ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
 
 @ex.config
 def config():
     test_split = 0.2
     checkpoint_dir = 'checkpoints/'
     learning_rate = 5e-5  # 5e-5, 3e-5, 2e-5 are recommended in the paper
-    epochs = 20
+    epochs = 3
     warmup = 0.1
 
     seed = 0
     metric_name = 'mrr'
-    metric_func = f'calc_{metric_name}'
-    metric_baseline_func = f'calc_random_{metric_name}'
+    metric_func = 'calc_' + metric_name
+    metric_baseline_func = 'calc_random_' + metric_name
     criterion_func = 'hinge_loss'
-    batch_size = 128  # 16, 32 are recommended in the paper
+    batch_size = 32  # 16, 32 are recommended in the paper
     test_batch_size = 16 # batch_size
     statistic_accumalation = 100
 
@@ -61,21 +60,20 @@ def config():
     #f'{checkpoint_dir}epoch: 9 calc_mrr:   0.7970 hinge_loss:   0.1879'
     # None if not
 
-    model_name = 'LASERembedder'
+    model_name = 'BERTLike'
     model_config = None
     has_scheduler = False
-    if model_name is 'BERTLike':
-        model_config = {'bert_type': '-6-attentions',
-                    'lang': 'ru', 'float_mode': 'fp32'}
+    if model_name == 'BERTLike':
+        model_config = {'bert_type': 'bert-base-uncased',
+                    'lang': 'en', 'float_mode': 'fp32'}
         has_scheduler = False
         warmup = 0.1
-    elif model_name is 'USEncoder':
+    elif model_name == 'USEncoder':
         model_config = {'float_mode': 'fp32', 'lang': 'ru'}
-    elif model_name is 'LASERembedder' or 'LASERtransformer_embedder':
+    elif model_name == 'LASERembedder' or model_name == 'LASERtransformer_embedder':
         model_config = {'lang': 'en', 'lay_num': 22}
     else:
         raise Exception('model is not defined')
-
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
     max_dataset_size = int(1e5)
     multigpu = True
@@ -131,6 +129,8 @@ def get_model_optimizer(model):
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name, statistic_accumalation, \
         test_batch_size, seed, has_scheduler, multigpu):
+    if checkpoint_dir[-1] != '/':
+        checkpoint_dir = checkpoint_dir + '/'
 
     torch.manual_seed(seed)
     #assert(not has_scheduler or not multigpu)
@@ -175,7 +175,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     val_loss_before = val_loss_before.item()
     _log.info("***** Running training *****")
     _log.info(f"  Num steps = {num_train_optimization_steps}")
-    _log.info(f"Score before fine-tuning: {val_score_before:9.4f}")
+    _log.info(f"Score before fruine-tuning: {val_score_before:9.4f}")
     _log.info(f"Loss before fine-tuning: {val_loss_before:9.4f}")
     _log.info(f"Random choice score: {metric_baseline(test_batch_size):9.4f}")
     writer.add_scalar("val/score", val_score_before, 0)
@@ -192,7 +192,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         batch_num = 0
         curr_loss = 0
         curr_score = 0
-        for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
+        for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc="epoch {epoch}")):
             optimizer.zero_grad()
 
             embeddings = model(batch)
@@ -239,6 +239,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         ex.log_scalar("train.total_score", mean_train_score)
 
         _log.info(f"score:{val_score:9.4f} | loss:{total_loss:9.4f}")
+
         checkpoint_name = checkpoint_dir + f"epoch:{epoch:2d} {metric_func}:{val_score:9.4f} {criterion_func}:{total_loss:9.4f}/"
         model.save_to(checkpoint_name)
 
