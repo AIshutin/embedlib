@@ -6,6 +6,7 @@ import os
 import random
 import shutil
 import copy
+from performance_test import docker_measuring
 
 DIR = os.getcwd()
 if DIR[-1] != '/':
@@ -66,7 +67,18 @@ class RunTracker:
             if (score_func + ':') in el:
                 next = True
                 assert(score is None)
-        return {score_func: score}
+        docker_dir = os.path.join(tmpdir, 'docker_dir')
+        try:
+            shutil.rmtree(docker_dir)
+        except FileNotFoundError:
+            pass
+        os.mkdir(docker_dir)
+        mean_time, mean_memory = docker_measuring(docker_dir, self.params['batch_size'])
+        shutil.rmtree(docker_dir)
+        return_dict = {score_func: score,
+                       'time': mean_time,
+                       'memory': mean_memory}
+        return return_dict
 
 
 def base_func(self, request, max_dataset_size, model_name):

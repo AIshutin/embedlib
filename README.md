@@ -22,3 +22,5 @@ ML-часть, распиленная на пайплайны:
 
 ## Utilities usage examples
 `python3 memory_checker.py --checkpoint ../../the_first_weights/ --text ./text_samples.json --batch_size=16`
+
+`python3 scripts/importance_marker.py --text test/small_example.json --checkpoint ../the_first_weights/`

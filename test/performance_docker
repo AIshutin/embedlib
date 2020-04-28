@@ -7,9 +7,12 @@ RUN pip3 install /app/embedlib/
 COPY text_samples.json /app/
 COPY model /app/model/
 COPY memory_checker.py /app/memory_checker.py
-RUN ls /app
+ARG _BATCH_SIZE=16
 ENV BATCH_SIZE=$_BATCH_SIZE
 CMD mprof run /app/memory_checker.py --checkpoint /app/model/ \
                                      --text /app/text_samples.json \
                                      --batch_size=$BATCH_SIZE && \
-    echo "-----" && cat *.dat
+    echo "-----" && \
+    cat logs.txt && \
+    echo "-----" && \
+    cat *.dat

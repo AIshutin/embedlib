@@ -192,7 +192,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
         batch_num = 0
         curr_loss = 0
         curr_score = 0
-        for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc="epoch {epoch}")):
+        for bidx, batch in enumerate(tqdm.tqdm(iter(train), desc=f"epoch {epoch}")):
             optimizer.zero_grad()
 
             embeddings = model(batch)

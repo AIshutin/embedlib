@@ -22,7 +22,7 @@ def pytest_sessionfinish(session, exitstatus):
     print(f"session exitstatus is {exitstatus}")
     if exitstatus != 0:
         return
-
+    print(session.results)
     parsed_results = []
     params_variety = dict()
     table_params = set()
@@ -45,17 +45,19 @@ def pytest_sessionfinish(session, exitstatus):
         for option in el[0]:
             if option not in table_params:
                 static_params[option] = el[0][option]
-
+    print(params_variety)
     table_name = static_params['model_name']
     headers = ['criterion']
     spans = []
-    for i, el in enumerate(sorted(params_variety['metric_name'])): # inference time, max memory
+    cord = 1
+    for i, el in enumerate(sorted(params_variety['metric_name']) + ['time', 'memory']): # inference time, max memory
         headers.append(el)
-        cord = i * len(params_variety) + 1
         curr_span = [[0, cord]]
+        cord += 1
         for j in range(len(params_variety['batch_size']) - 1):
             headers.append('')
-            curr_span.append([0, cord + j + 1])
+            curr_span.append([0, cord])
+            cord += 1
         spans.append(curr_span)
 
     subheaders = ['batch_size']
@@ -74,10 +76,9 @@ def pytest_sessionfinish(session, exitstatus):
         else:
             cells[mystr] = el[1]
     cells_structure = []
-    columns = sorted(params_variety['metric_name'])
+    columns = sorted(params_variety['metric_name']) + ['time', 'memory']
     for crit in sorted(params_variety['criterion_func']):
         row = [crit]
-
         for col in columns:
             for bs in sorted(params_variety['batch_size']):
                 results = cells[f'{crit}|{bs}']

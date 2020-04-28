@@ -2,7 +2,6 @@ torch
 torchvision
 memory_profiler
 numpy
-pickle
 tqdm
 sacred
 flask
