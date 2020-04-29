@@ -9,6 +9,7 @@ import emoji
 import torch.nn.functional as F
 import nltk
 nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
 
 model = None
 
@@ -18,13 +19,11 @@ punctuation = string.punctuation + '’“”’—‘' + '–'
 def char_is_emoji(character):
     return character in emoji.UNICODE_EMOJI
 
-def match_tokens_with_words(tokens, text):
+def parse_to_words(text):
     text = text.lower()
     words = []
     words_indexes = []
-
     current = []
-
     for i, el in enumerate(text + ' '):
         if el.isalpha():
             current.append(el)
@@ -51,99 +50,22 @@ def match_tokens_with_words(tokens, text):
             words_indexes.append([i, i])
         else:
             logging.warning(f"Warning! Strange char {el}")
-    assert(len(current) == 0)
-    logging.debug('words', words)
+    return words, words_indexes
 
-    current_word = 0
-    prefix = 0
-    token2words = []
-    for el in tokens:
-        if prefix == 0:
-            if el == words[current_word]:
-                token2words.append(current_word)
-                current_word += 1
-            elif el == words[current_word][:len(el)]:
-                token2words.append(current_word)
-                prefix = len(el)
-            else:
-                logging.warning("Tokens to words can not be compleated. Returning current results")
-                logging.warning(f"{el} {current_word} {words[current_word]} {prefix}")
-                logging.warning(f"{match_tokens_with_words}")
-                return None
+def text_processer(text, words, words_indexes):
+    original = model(text)
+    embeddings = []
+    for i in range(len(words)):
+        tag = nltk.pos_tag([words[i]])[0][1]
+        logging.debug(f"words[i]: {tag}")
+        if pos2pronouns.get(tag, None) is None:
+            placeholder = '[MASK]'
         else:
-            if '##' not in el:
-                logging.warning(f"Expected '##' in {el} token")
-            else:
-                el = el[2:]
-            if el == words[current_word][prefix:len(el) + prefix]:
-                token2words.append(current_word)
-                prefix += len(el)
-                if prefix == len(words[current_word]):
-                    prefix = 0
-                    current_word += 1
-            else:
-                logging.warning(f"{el} {current_word} {words[current_word]} {prefix}")
-                logging.warning(f"{match_tokens_with_words}")
-                logging.warning("Tokens to words can not be compleated. Returning current results.")
-                return None
-    assert(len(words) == len(words_indexes))
-    return [tokens, token2words, words, words_indexes]
-
-def call_BERT_with_input_grad(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
-    if attention_mask is None:
-        attention_mask = torch.ones_like(input_ids)
-    if token_type_ids is None:
-        token_type_ids = torch.zeros_like(input_ids)
-
-    # We create a 3D attention mask from a 2D tensor mask.
-    # Sizes are [batch_size, 1, 1, to_seq_length]
-    # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-    # this attention mask is more simple than the triangular masking of causal attention
-    # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-    extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-
-    # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-    # masked positions, this operation will create a tensor which is 0.0 for
-    # positions we want to attend and -10000.0 for masked positions.
-    # Since we are adding it to the raw scores before the softmax, this is
-    # effectively the same as removing these entirely.
-    extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
-    extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-
-    # Prepare head mask if needed
-    # 1.0 in head_mask indicate we keep the head
-    # attention_probs has shape bsz x n_heads x N x N
-    # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-    # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-    if head_mask is not None:
-        if head_mask.dim() == 1:
-            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
-        elif head_mask.dim() == 2:
-            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-        head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
-    else:
-        head_mask = [None] * self.config.num_hidden_layers
-
-    embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
-    embedding_output = torch.tensor(embedding_output, requires_grad=True)
-    encoder_outputs = self.encoder(embedding_output,
-                                   extended_attention_mask,
-                                   head_mask=head_mask)
-    sequence_output = encoder_outputs[0]
-    pooled_output = self.pooler(sequence_output)
-
-    outputs = (sequence_output, pooled_output,) + encoder_outputs[1:] # add hidden_states and attentions if they are here
-    return (outputs, embedding_output)
-
-def text_processer(text):
-    text = text[:model.max_seq_len]
-    tokenized_text = model.tokenizer.encode(text, add_special_tokens=True)
-    _, match, words, words_indexes = match_tokens_with_words(model.tokenizer.tokenize(text), text)
-    tensor = torch.tensor([tokenized_text])
-    textembedding, preembedding = call_BERT_with_input_grad(model.qembedder, tensor)
-    embedding = F.normalize(model.get_embedding(textembedding[0]), dim=1)
-    return embedding, preembedding, [None] + match, words, words_indexes
+            placeholder = pos2pronouns.get(tag, None)
+        text2 = text[:words_indexes[i][0]]
+        text2 = text2 + placeholder + text[words_indexes[i][1] + 1:]
+        embeddings.append(model(text2))
+    return original, embeddings
 
 def calc_self_importance(token_gradients, match, words=[]):
     grads = [0] * (len(match) - 1)
@@ -154,22 +76,48 @@ def calc_self_importance(token_gradients, match, words=[]):
     grads = [el / total for el in grads]
     return grads
 
-def extract_top_n_important_words(text, text2=None, n=5):
-    embedding, preembedding, match, words, words_indexes = text_processer(text)
-
-    if text2 is None:
-        embedding.pow(2).mean().backward()
-    else:
-        embedding2 = F.normalize(model.qembedd([text2]), dim=1)
-        embedding2.dot(embedding).mean().backward()
-
-    result = calc_self_importance(preembedding.grad, match, words)
-    rating = [[result[i], words[i], words_indexes[i]] for i in range(len(words))]
+def extract_top_n_important_words(text, n=5):
+    words, words_indexes = parse_to_words(text)
+    original, embeddings = text_processer(text, words, words_indexes)
+    results = [((embedding - original) ** 2).sum() for embedding in embeddings]
+    rating = [[results[i], words[i], words_indexes[i]] for i in range(len(words))]
     rating.sort(reverse=True)
-    assert(abs(sum(result) - 1) < 0.1)
     return rating[:n]
 
+pos2pronouns_en = {}
+'''
+    'ADJ': 'some',
+    'RB': 'somehow',
+    'RBR': 'somehow',
+    'RBS': 'somehow',
+    'NN': 'something',
+    'NUM': '145',
+    'PRON': 'someone',
+    'VB': 'do',
+    'VBD': 'did',
+    'VBG': 'doing',
+    'VBN': 'done',
+    'VBP': 'do',
+    'VBZ': 'does',
+    'WDT': '[MASK]',
+    'WP': '[MASK]',
+    'WP$': '[MASK]',
+    'WRB': '[MASK]'
+}'''
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 LANGUAGE = 'english'
+pos2pronouns = {'english': pos2pronouns_en}[LANGUAGE]
+
 INF = int(1e10)
 
 class SumTopK:
@@ -213,7 +161,6 @@ def extract_top_n_important_sentences(text, n=5, merge_function=SumTopK(5)):
     for i in range(len(sentences)):
         sentence_rating[i] = (sentence_rating[i] / div, sentences[i], sentences_indexes[i])
     sentence_rating.sort(reverse=True)
-    print(sentence_rating)
     return sentence_rating[:n]
 
 if __name__ == '__main__':
@@ -221,12 +168,16 @@ if __name__ == '__main__':
                                                    'of words in text for understanding')
     parser.add_argument('--text', help='text to process')
     parser.add_argument('--checkpoint', help='path to checkpoint of model to use')
+    parser.add_argument('--v', help='model version')
+    parser.add_argument('--n', default=3, type=int, help='number of words to mark')
     args = parser.parse_args()
 
-    model = embedlib.utils.load_model(args.checkpoint)
+    model = embedlib.Embedder(args.v, args.checkpoint)# embedlib.utils.load_model(args.checkpoint)
     texts = json.load(open(args.text))['text']
     for text in texts:
+        words = extract_top_n_important_words(text, args.n)
+        colorful_segments = sorted([el[-1] for el in words], reverse=True)
+        for el in colorful_segments:
+            text = text[:el[0]] + bcolors.OKGREEN + text[el[0]:el[1] + 1] + bcolors.ENDC + text[el[1] + 1:]
         print(text)
-        extract_top_n_important_sentences(text)
-
         print()
