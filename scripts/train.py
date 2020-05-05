@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from tensorboardX import SummaryWriter
 
@@ -19,7 +19,7 @@ from embedlib import losses, metrics
 from embedlib.datasets import collate_wrapper
 from embedlib import datasets
 
-from embedlib import models, optimizers
+from embedlib import models
 
 from sacred import Experiment
 from sacred.observers import MongoObserver, TelegramObserver
@@ -37,8 +37,6 @@ observer = MongoObserver.create(url='mongodb+srv://cerebra-autofaq:8jxIlp0znlJm8
                                 port=27017)
 ex.observers.append(observer)
 
-#ex.observers.append(TelegramObserver.from_config("./aishutin-telegramobserver-config.json"))
-
 @ex.config
 def config():
     test_split = 0.2
@@ -52,31 +50,28 @@ def config():
     metric_func = 'calc_' + metric_name
     metric_baseline_func = 'calc_random_' + metric_name
     criterion_func = 'hinge_loss'
-    batch_size = 32  # 16, 32 are recommended in the paper
+    batch_size = 16  # 16, 32 are recommended in the paper
     test_batch_size = 16 # batch_size
     statistic_accumalation = 100
 
     continue_training_from_checkpoint = None
-    #f'{checkpoint_dir}epoch: 9 calc_mrr:   0.7970 hinge_loss:   0.1879'
-    # None if not
-
-    model_name = 'BERTLike'
+    model_name = 'RoBERTaLike'
     model_config = None
-    has_scheduler = False
+    has_scheduler = True
+
     if model_name == 'BERTLike':
         model_config = {'bert_type': 'bert-base-uncased',
                     'lang': 'en', 'float_mode': 'fp32'}
-        has_scheduler = False
-        warmup = 0.1
-    elif model_name == 'USEncoder':
-        model_config = {'float_mode': 'fp32', 'lang': 'ru'}
-    elif model_name == 'LASERembedder' or model_name == 'LASERtransformer_embedder':
-        model_config = {'lang': 'en', 'lay_num': 22}
+    elif model_name == 'GPT2Like':
+        model_config = {'lang': 'en'}
+    elif model_name == 'RoBERTaLike':
+        model_config = {'lang': 'ru'}
     else:
         raise Exception('model is not defined')
     dataset_names = ['en-twitt-corpus' if model_config['lang'] == 'en' else 'ru-opendialog-corpus']
     max_dataset_size = int(1e5)
     multigpu = True
+    max_grad_norm = 1.0
 
 @ex.capture
 def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
@@ -90,7 +85,7 @@ def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, ma
     train_data, test_data = torch.utils.data.random_split(corpus, [train_size, test_size])
 
     if multigpu:
-        print('MultiDataset')
+        _log.info('MultiDataset')
         train_sampler = torch.utils.data.distributed.DistributedSampler(
                     train_data, num_replicas=hvd.size(), rank=hvd.rank())
         test_sampler = torch.utils.data.distributed.DistributedSampler(
@@ -123,21 +118,19 @@ def get_model(model_name, model_config, continue_training_from_checkpoint, multi
 @ex.capture
 def get_model_optimizer(model):
     return AdamW
-    #return getattr(embedlib.optimizers, f'{model.__name__}Optimizer')
 
 @ex.automain
 def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metric_func, \
         metric_baseline_func, criterion_func, metric_name, statistic_accumalation, \
-        test_batch_size, seed, has_scheduler, multigpu):
+        test_batch_size, seed, has_scheduler, multigpu, max_grad_norm):
     if checkpoint_dir[-1] != '/':
         checkpoint_dir = checkpoint_dir + '/'
 
     torch.manual_seed(seed)
-    #assert(not has_scheduler or not multigpu)
 
     if multigpu:
-        import horovod.torch as hvd
         # Initialize Horovod
+        import horovod.torch as hvd
         hvd.init()
         torch.cuda.set_device(hvd.local_rank())
         device = torch.cuda.current_device()
@@ -158,8 +151,6 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
     num_warmup_steps = int(warmup * num_train_optimization_steps)
 
-
-
     if multigpu:
         optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate / hvd.size())
         optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
@@ -167,8 +158,8 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     else:
         optimizer = get_model_optimizer(model)(model.parameters(), lr=learning_rate)
     if has_scheduler:
-        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, \
-                                    t_total=num_train_optimization_steps)
+        scheduler =  get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, \
+                                    num_training_steps=num_train_optimization_steps)
 
     val_score_before, val_loss_before = metrics.get_mean_on_data([metric, criterion], \
                                                                 test, model)
@@ -209,7 +200,6 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
                 writer.add_scalar("train/score_dynamic", mean_score, step)
                 ex.log_scalar("train.loss_dynamic", mean_loss)
                 ex.log_scalar("train.score_dynamic", mean_score)
-                #print(mean_loss, mean_score, step)
                 step += 1
                 curr_loss = curr_score = 0
 
@@ -217,7 +207,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
 
             total_loss += loss.item()
             loss.backward()
-
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
             if has_scheduler:
                 scheduler.step()

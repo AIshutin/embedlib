@@ -6,6 +6,8 @@ rucorp-subtitles.txt
 scripts/docker-memtest/embedlib/
 scripts/docker-memtest/setup.py
 *.zip
+checkpoints
+scripts/checkpoints
 
 11-attentions/
 rucorp.txt

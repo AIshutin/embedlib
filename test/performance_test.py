@@ -25,6 +25,9 @@ def parse_memory_logs(data):
     return mean_memory_consumption
 
 def docker_measuring(tmpdir, batch_size=32):
+    tmpdir = '/home/aishutin/docker23'
+    os.mkdir(tmpdir)
+    print(tmpdir)
     shutil.copyfile('requirements.txt', os.path.join(tmpdir, 'requirements.txt'))
     shutil.copyfile('setup.py', os.path.join(tmpdir, 'setup.py'))
     shutil.copyfile('test/memory_checker.py', os.path.join(tmpdir, 'memory_checker.py'))
@@ -34,11 +37,11 @@ def docker_measuring(tmpdir, batch_size=32):
     shutil.copytree('../the_first_weights', os.path.join(tmpdir, 'model'))
     client = docker.from_env()
     tag = 'embedlib-tests' # str(random.randint(1, 1000000000))
-    client.images.build(path=str(tmpdir),
+    build_log = client.images.build(path=str(tmpdir),
                         tag=tag,
                         buildargs={'_BATCH_SIZE': str(batch_size)},
                         quiet=False)
-
+    print('build_log', build_log)
     output = client.containers.run(tag)
     output = output.decode('utf-8')
     _, time_logs, memory_logs = output.split('-' * 5)

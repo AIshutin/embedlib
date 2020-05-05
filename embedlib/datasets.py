@@ -40,7 +40,7 @@ class UbuntuCorpus(Dataset):
                 '''
 
                 for i in range(len(replicas)):
-                    replicas[i] = '[CLS] ' + remove_urls(' '.join(replicas[i]))
+                    replicas[i] = remove_urls(' '.join(replicas[i]))
 
                 for i in range(len(replicas) - 1):
                     if replicas[i].count('?') > 0 and replicas[i + 1].count('?') == 0 \
@@ -127,6 +127,8 @@ class TwittCorpus(Dataset):
             try:
                 el[0] = el[0].replace('[SEP]', '').rstrip()
                 el[1] = el[1].replace('[SEP]', '').rstrip()
+                el[0] = el[0].replace('[CLS]', '').rstrip()
+                el[1] = el[1].replace('[CLS]', '').rstrip()
             except Exception as exp:
                 print(exp)
                 print(el)

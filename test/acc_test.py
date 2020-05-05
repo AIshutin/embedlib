@@ -11,7 +11,7 @@ from performance_test import docker_measuring
 DIR = os.getcwd()
 if DIR[-1] != '/':
     DIR = DIR + '/'
-DIR = DIR + 'scripts/checkpoints'
+DIR = DIR + 'checkpoints'
 
 class TestMe:
     pass

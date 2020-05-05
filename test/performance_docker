@@ -1,5 +1,7 @@
 FROM python:3.7
 COPY requirements.txt /app/
+RUN ls /app/
+RUN cat /app/requirements.txt
 RUN pip3 install -r /app/requirements.txt
 COPY embedlib /app/embedlib/embedlib
 COPY setup.py /app/embedlib/
