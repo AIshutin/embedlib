@@ -4,9 +4,12 @@ import csv
 from .utils import remove_urls
 from itertools import groupby
 import torch
+import json
+
+LIBPATH = os.path.dirname(os.path.dirname(__file__))
 
 class UbuntuCorpus(Dataset):
-    def __init__(self, tokenizer, _cnt=30, dir='../dialogs', max_seq_len=512):
+    def __init__(self, _cnt=30, dir='../dialogs'):
         super().__init__()
         dialogs = []
         thr = 30
@@ -35,18 +38,14 @@ class UbuntuCorpus(Dataset):
                 Question replic is a replic with ? followed by answer replic
 
                 Both must be longer than thr (after link replacemenets)
-
-                And due to BERT restrictions both in tokenized form must be shorter than max_seq_len
                 '''
 
                 for i in range(len(replicas)):
-                    replicas[i] = '[CLS] ' + remove_urls(' '.join(replicas[i]))
+                    replicas[i] = remove_urls(' '.join(replicas[i]))
 
                 for i in range(len(replicas) - 1):
                     if replicas[i].count('?') > 0 and replicas[i + 1].count('?') == 0 \
-                      and min(len(replicas[i]), len(replicas[i + 1])) >= thr \
-                      and len(tokenizer.tokenize(replicas[i])) <= max_seq_len \
-                      and len(tokenizer.tokenize(replicas[i + 1])) <= max_seq_len:
+                      and min(len(replicas[i]), len(replicas[i + 1])) >= thr:
                         qa_pairs.append([replicas[i], replicas[i + 1]])
                         _score_cnt -= 1
                         if _cnt <=0:
@@ -87,9 +86,34 @@ class TokenizedQABatch:
 def collate_wrapper(batch):
     return TokenizedQABatch(batch)
 
+class SberQuAD(Dataset):
+    files = ['dev-1.1.json', 'train-1.1.json']
+
+    def parse_file(self, path):
+        result = []
+        data = json.load(open(path))
+        print(data.keys())
+        data = data['data']['paragraphs']
+        for paragraph in data:
+            answer = paragraph['context']
+            for qas in paragraph['qas']:
+                question = qas['question']
+                result.append((question, answer))
+        return result
+
+    def __init__(self, path=os.path.join(LIBPATH, 'sberquad')):
+        self.data = []
+        for file in self.files:
+            self.data += self.parse_file(os.path.join(path, file))
+
+    def __getitem__(self, ind):
+        return self.data[ind]
+
+    def __len__(self):
+        return len(self.data)
 
 class TwittCorpus(Dataset):
-    def __init__(self, tokenizer, max_dataset_size=100, path='../rucorp.txt', max_seq_len=512):
+    def __init__(self, max_dataset_size=100, path='../rucorp.txt'):
         '''
         Gets Path to TXT file in format
         [CLS] Question [SEP] \n
@@ -125,18 +149,17 @@ class TwittCorpus(Dataset):
         good = []
         for el in dialogs:
             try:
-                el[0] = el[0].replace('[SEP]', '').rstrip()
-                el[1] = el[1].replace('[SEP]', '').rstrip()
+                for k in range(2):
+                    el[k] = el[k].replace('[SEP]', '').replace('[CLS]', '').rstrip()
+                    if el[k] == '':
+                        el[k] = '-'
             except Exception as exp:
                 print(exp)
                 print(el)
                 raise exp
-            qtok = tokenizer.encode(el[0])
-            atok = tokenizer.encode(el[1])
-            if max(len(qtok), len(atok)) <= max_seq_len:
-                good.append([el[0], el[1]])
-                if len(good) == max_dataset_size:
-                    break
+            good.append([el[0], el[1]])
+            if len(good) == max_dataset_size:
+                break
         self.qa_s = good
 
     def __len__(self):
@@ -146,20 +169,26 @@ class TwittCorpus(Dataset):
         return (self.qa_s[idx][0], self.qa_s[idx][1])
 
 
-corpus_handler = {'en-ubuntu-corpus': (UbuntuCorpus, '../dialogs'), \
-                'en-twitt-corpus': (TwittCorpus, '../corp.txt'), \
-                'ru-opendialog-corpus': (TwittCorpus, '../rucorp-subtitles.txt'), \
-                'ru-toloka': (TwittCorpus, '../rucorp.txt')}
+corpus_handler = {'en-ubuntu-corpus': (UbuntuCorpus, 'dialogs'), \
+                'en-twitt-corpus': (TwittCorpus, 'corp.txt'), \
+                'ru-opendialog-corpus': (TwittCorpus, 'rucorp-subtitles.txt'), \
+                'ru-toloka': (TwittCorpus, 'rucorp.txt'),
+                'sberquad': (SberQuAD, 'sberquad')
+                }
 
 class CorpusData(Dataset):
-    def __init__(self, names, tokenizer, max_dataset_size=100, max_seq_len=512):
+    def __init__(self, names, max_dataset_size=100):
         super(CorpusData, self).__init__()
-        datasets = [corpus_handler[el][0](tokenizer, max_dataset_size, corpus_handler[el][1], max_seq_len) \
-                    for el in names]
+        datasets = []
+        for el in names:
+            datasets.append(corpus_handler[el][0](path=os.path.join(LIBPATH, corpus_handler[el][1]), \
+                                  max_dataset_size=max_dataset_size))
+
         self.data = torch.utils.data.ConcatDataset(datasets)
+        self.max_dataset_size = max_dataset_size
 
     def __len__(self):
-        return len(self.data)
+        return min(len(self.data), self.max_dataset_size)
 
     def __getitem__(self, idx):
         return self.data[idx]

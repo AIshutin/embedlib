@@ -1,8 +1,8 @@
 import re
 import os
 import torch
-from pytorch_transformers import BertTokenizer, BertForQuestionAnswering
-from pytorch_transformers import BertModel, BertConfig
+from transformers import BertTokenizer, BertForQuestionAnswering
+from transformers import BertModel, BertConfig
 import json
 from . import models
 import gc
@@ -24,16 +24,15 @@ def print_batch(batch):
 def load_model(checkpoint_dir):
     if checkpoint_dir[-1] != '/':
         checkpoint_dir = checkpoint_dir + '/'
-    print(f"loading model from {checkpoint_dir}")
-    config = json.load(open(f'{checkpoint_dir}model_config.json'))
+    config = json.load(open(checkpoint_dir + 'model_config.json'))
     if 'name' in config:
         name = config['name']
         config.pop('name')
     else:
         name = config['__name__']
         config.pop('__name__')
+    config.pop('batch_mode', None)
     config['cache_dir'] = checkpoint_dir
-    print(f"CONFIG {config}", name)
     return getattr(models, name)(**config)
 
 ## MEM utils ##

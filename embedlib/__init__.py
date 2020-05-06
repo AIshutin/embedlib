@@ -10,7 +10,7 @@ class Embedder:
     """Takes model type and path to checkpoint dir and creates a functor that can return numpy embeddings."""
 
     def __init__(self, model, path):
-        self.model = load_model(f'{path}')
+        self.model = load_model(path)
         self.model.eval()
         assert(self.model.version == model)
 

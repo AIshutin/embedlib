@@ -24,8 +24,6 @@ def calc_mrr(X, Y, silent=True):
         arr.sort(reverse=True)
         for j in range(len(arr)):
             if arr[j][1] == i:
-                if not silent:
-                    print(f"q{i} right pos: {j}")
                 mrr += 1 / (j + 1)
                 break
     mrr /= n
