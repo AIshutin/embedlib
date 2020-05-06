@@ -74,11 +74,11 @@ def config():
     max_grad_norm = 1.0
 
 @ex.capture
-def get_data(_log, data_path, tokenizer, test_split, max_seq_len, batch_size, max_dataset_size, \
+def get_data(_log, data_path, test_split, batch_size, max_dataset_size, \
             dataset_names, test_batch_size, multigpu):
     if multigpu:
         import horovod.torch as hvd
-    corpus = datasets.CorpusData(dataset_names, tokenizer, max_dataset_size)
+    corpus = datasets.CorpusData(dataset_names, max_dataset_size)
     _log.info("Corpus size: " + str(len(corpus)))
     test_size = int(len(corpus) * test_split)
     train_size = len(corpus) - test_size
@@ -141,7 +141,7 @@ def train(_log, epochs, batch_size, learning_rate, warmup, checkpoint_dir, metri
     model.to(device)
     gc.collect()
 
-    train, test = get_data(_log, '.', model.tokenizer, max_seq_len=model.max_seq_len)
+    train, test = get_data(_log, '.')
 
     metric = get_metric()
     metric_baseline = get_metric(metric_baseline_func)
