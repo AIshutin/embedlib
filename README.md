@@ -1,6 +1,6 @@
 # embedlib
 
-Embedlib is a library similar to [sentence-transformers](https://github.com/UKPLab/sentence-transformers). The main advantages of embedlib are:
+`embedlib` is a library similar to [sentence-transformers](https://github.com/UKPLab/sentence-transformers). The main advantages of `embedlib` over `sentence-transformers` are:
 - the support of Russian datasets and models
 - multi GPU support
 - half-precision mode
